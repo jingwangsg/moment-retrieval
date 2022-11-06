@@ -1,0 +1,29 @@
+_base_:
+  - "../common/runtime.yaml"
+
+data:
+  type: tacos
+  processors:
+    - type: load_hdf5
+      from_key: query
+    - type: load_hdf5
+      from_key: video_id
+    - type: seq_sample
+      from_key: video_id_hdf5
+  collater: default
+
+model:
+  type: deformable
+  # backbone specific param
+
+train:
+  num_epoch: 12
+  eval_epoch_interval: 1
+  optimizer:
+    type: adam_w
+    lr: 1e-5
+    weight_decay: 0.98
+  
+  # lr_scheduler:
+  #   type: 
+  
