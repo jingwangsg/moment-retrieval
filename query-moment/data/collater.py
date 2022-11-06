@@ -4,6 +4,7 @@ import copy
 from typing import Dict, List, Any
 import numpy as np
 from kn_util.general import global_registry
+from collections import OrderedDict
 
 @global_registry.register_collater("default")
 class DefaultCollater:
@@ -12,14 +13,9 @@ class DefaultCollater:
         self.processors = processors
         self.is_train = is_train
     
-    def get_feature_dict(self, batch) -> Dict[List[np.ndarray]]:
-        vid_feat, text_inds = collect_features_from_sample_list(batch, include_keys=["vid_feat", "text_inds"])
-        vid_feat, vid_mask = general_pad(vid_feat, fill_value=0.0, axis=0)
-        text_inds, text_mask = general_pad(text_inds, fill_value=0, axis=0)
-
-        feature_dict = dict(vid_feat=vid_feat, vid_mask=vid_mask, text_inds=text_inds, text_mask=text_mask)
-        return feature_dict
-
+    def get_feature_dict(self, batch) -> Dict[str, List[np.ndarray]]:
+        keys = list(batch[0].keys())
+        return dict(zip(keys, collect_features_from_sample_list(batch, keys=keys)))
     
     def __call__(self, _batch):
         batch = copy.deepcopy(_batch)
