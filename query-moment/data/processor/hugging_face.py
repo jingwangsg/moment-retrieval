@@ -38,17 +38,11 @@ class HuggingfaceEmbedding:
         log.warn("[processor] hf_embedding may use cuda")
         self.cache_dir = cache_dir
         self.is_text = is_text
-        model = AutoModel.from_pretrained(pretrained)
-        model.eval()
-        self.model = model
-        self.extractor = (
-            AutoTokenizer.from_pretrained(pretrained)
-            if is_text
-            else AutoFeatureExtractor.from_pretrained(pretrained)
-        )
+
         self.to_embeddings = to_embeddings
         self.from_key = from_key
         self.hash_key = hash_key
+        self.pretrained = pretrained
 
         if cache_dir is not None:
             os.makedirs(cache_dir, exist_ok=True)
@@ -61,14 +55,25 @@ class HuggingfaceEmbedding:
         if self.cache_dir:
             cache_file = osp.join(self.cache_dir, f"{hash_id}.npy")
             if osp.exists(cache_file):
-                try:
+                # try:
+                # embeddings = np.load(cache_file)
+                # load_fail = False
+                # except:
+                #     load_fail = True
+                # if not load_fail and self.to_embeddings:
+                if self.to_embeddings:
                     embeddings = np.load(cache_file)
-                    load_fail = False
-                except:
-                    load_fail = True
-                if not load_fail and self.to_embeddings:
                     result[self.from_key + "_embeddings"] = embeddings
                 return result
+        if not hasattr(self, "model"):
+            model = AutoModel.from_pretrained(self.pretrained)
+            model.eval()
+            self.model = model
+            self.extractor = (
+                AutoTokenizer.from_pretrained(self.pretrained)
+                if self.is_text
+                else AutoFeatureExtractor.from_pretrained(self.pretrained)
+            )
 
         model = self.model.cuda()
         inputs = self.extractor(data, return_tensors="pt")

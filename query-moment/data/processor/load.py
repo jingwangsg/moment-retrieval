@@ -23,7 +23,7 @@ class LoadOrCache:
             except:
                 load_fail = False
 
-            if not load_fail:
+            if not load_fail:  # safe load for big file
                 return
         global_registry.register_object(
             "_CACHE_SIGNAL", True
@@ -84,17 +84,12 @@ class DecodeVideoLoader:
 
     def __call__(self, result):
         video_id = result[self.from_key]
-        if not self.cache_dir:
+        if self.cache_dir:
             cache_file = osp.join(self.cache_dir, f"{video_id}.npy")
             if osp.exists(cache_file):
-                try:
-                    arr = np.load(cache_file)
-                    load_fail = False
-                except:
-                    load_fail = True
-                if not load_fail:
-                    result[self.from_key + "_imgs"] = arr
-                    return result
+                arr = np.load(cache_file)
+                result[self.from_key + "_imgs"] = arr
+                return result
         video_path = self.video_format.format(video_id)
         vr = de.VideoReader(video_path)
         tot_len = len(vr)
@@ -104,7 +99,7 @@ class DecodeVideoLoader:
         )
         arr = vr.get_batch(sampled_indices).asnumpy()
 
-        if not self.cache_dir:
+        if self.cache_dir:
             np.save(cache_file, arr)
 
         result[self.from_key + "_imgs"] = arr

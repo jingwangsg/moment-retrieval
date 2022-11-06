@@ -1,5 +1,5 @@
 from kn_util.data import general_pad, stack_list_to_tensor, fix_tensor_to_float32, collect_features_from_sample_list
-from .processors import apply_processors
+from .processor import apply_processors
 import copy
 from typing import Dict, List, Any
 import numpy as np

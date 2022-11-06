@@ -6,9 +6,9 @@ pipeline_verbose: ${debug}
 data:
   dataset: tacos
   dataset_dir: ${data_dir}/${data.dataset}
-  vid_feat_type: i3d
-  # vid_feat_type: clip.video.avg.avg
-  upload_vocab_key: glove_vocab
+  # vid_feat_type: i3d
+  vid_feat_type: clip.video.avg.avg
+  # upload_vocab_key: glove_vocab
   num_clip: 256
 
   bert_pretrained: roberta-large
@@ -29,7 +29,7 @@ data:
   processors:
     - type: load_hdf5
       hdf5_file: ${data.dataset_dir}/${data.vid_feat_type}.hdf5
-      # entry_template: "{}/patch"
+      path_template: "{}/cls"
       from_key: video_id
     - type: load_npy
       npy_dir: ${cache_dir}/${data.dataset}/${data.bert_pretrained}
