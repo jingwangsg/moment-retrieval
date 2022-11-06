@@ -1,5 +1,11 @@
-from torch.utils.data import SequentialSampler, RandomSampler, DistributedSampler, DataLoader
+from torch.utils.data import (
+    SequentialSampler,
+    RandomSampler,
+    DistributedSampler,
+    DataLoader,
+)
 from ..processors import build_processors, apply_processors
+from kn_util.general import global_registry
 
 
 class BaseDataModule:
@@ -33,14 +39,23 @@ class BaseDataModule:
 
     def build_dataloaders(self):
         cfg = self.cfg
+        processors = build_processors(cfg.data.processors)
         self.dataloaders = dict()
         for domain in ["train", "val", "test"]:
+            collater = global_registry.build_collater(
+                cfg.data.collater,
+                cfg=cfg,
+                processors=processors,
+                is_train=(domain == "train"),
+            )
             sampler = self._build_sampler(domain)
             self.dataloaders[domain] = DataLoader(
                 self.dataset[domain],
                 batch_size=cfg.train.batch_size,
+                sampler=sampler,
                 prefetch_factor=cfg.train.prefetch_factor,
                 num_workers=cfg.train.num_workers,
+                collate_fn=collater,
             )
 
     def get_dataloader(self, domain):

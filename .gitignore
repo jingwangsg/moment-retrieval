@@ -1,0 +1,4 @@
+**/data-bin
+**/__pycache__
+**/.vscode
+**/*.pt
