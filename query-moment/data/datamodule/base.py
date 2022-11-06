@@ -9,7 +9,7 @@ from torch.utils.data import (
     DistributedSampler,
     DataLoader,
 )
-from data.processors import build_processors, apply_processors
+from data.processor import build_processors, apply_processors
 from kn_util.general import global_registry, get_logger
 from kn_util.debug import explore_content
 
