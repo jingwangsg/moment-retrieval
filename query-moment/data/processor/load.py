@@ -8,12 +8,13 @@ import decord as de
 import os
 
 
-@global_registry.register_processor("batch.load_or_cache")
+@global_registry.register_processor("load_cache")
 class LoadOrCache:
-    is_batch_processor = True
-
-    def __init__(self, cache_path) -> None:
-        self.cache_path = cache_path
+    def __init__(self, cache_dir=None, hash_key=None, from_key=None) -> None:
+        assert cache_dir and from_key
+        self.cache_dir = cache_dir
+        self.hash_key = hash_key
+        self.from_key = from_key
 
     def __call__(self, batch):
         if osp.exists(self.cache_path):
@@ -26,7 +27,7 @@ class LoadOrCache:
             if not load_fail:  # safe load for big file
                 return
         global_registry.register_object(
-            "_CACHE_SIGNAL", True
+            f"@{id(self)}", True
         )  # cache signal for later caching
         return batch
 
