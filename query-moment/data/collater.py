@@ -9,8 +9,10 @@ import copy
 from typing import Dict, List, Any
 import numpy as np
 from kn_util.general import global_registry
+from kn_util.debug import SignalContext
 from collections import OrderedDict
 
+_signal = "_TEST_PIPELINE_SIGNAL"
 
 @global_registry.register_collater("default")
 class DefaultCollater:
@@ -18,6 +20,7 @@ class DefaultCollater:
         self.cfg = cfg
         self.processors = processors
         self.is_train = is_train
+        self.not_verbose_yet = True
 
     def get_feature_dict(self, batch) -> Dict[str, List[np.ndarray]]:
         keys = list(batch[0].keys())
@@ -25,6 +28,8 @@ class DefaultCollater:
 
     def __call__(self, _batch):
         batch = copy.deepcopy(_batch)
-        batch = apply_processors(batch, self.processors)
+        with SignalContext(_signal, self.cfg.debug and self.not_verbose_yet):
+            batch = apply_processors(batch, self.processors)
+            self.not_verbose_yet = False  # only verbose on one batch
         feature_dict = self.get_feature_dict(batch)
         return fix_tensor_to_float32(stack_list_to_tensor(feature_dict))

@@ -1,6 +1,7 @@
 import sys
 import os.path as osp
 import copy
+from kn_util.debug import SignalContext
 
 sys.path.insert(0, osp.join(osp.dirname(__file__), "../.."))
 from torch.utils.data import (
@@ -16,17 +17,13 @@ from kn_util.debug import explore_content
 log = get_logger(__name__)
 _signal = "_TEST_PIPELINE_SIGNAL"
 
+
 class BaseDataModule:
     def __init__(self, cfg):
         self.cfg = cfg
         self.load_data()
-        if cfg.get("pipeline_verbose", False):
-            self.test_pipeline("preprocess")
         self.preprocess()
         self.build_dataloaders()
-        if cfg.get("pipeline_verbose", False):
-            self.test_pipeline("collater")
-        global_registry.delete_object(_signal)
 
     def load_data(self):
         """to be implemented in sub-class"""
@@ -43,22 +40,12 @@ class BaseDataModule:
             if domain != "train":
                 global_registry.set_object(_signal, False)
 
-            self.datasets[domain] = apply_processors(dataset, self.pre_processor)
-
-            global_registry.set_object(_signal, True)
-
-
-    def test_pipeline(self, stage="preprocess"):
-        if not global_registry.get_object(_signal, False):
-            global_registry.register_object(_signal, True)
-        if stage == "preprocess":
-            pass
-        if stage == "collater":  # processer + collater
-            x = iter(self.get_dataloader("train")).__next__()
-            log.info(
-                f"\napply [collater] {self.cfg.data.collater}\n"
-                + explore_content(x, "model input", max_depth=0, print_str=False)
-            )
+            with SignalContext(_signal, self.cfg.debug and domain == "train"):
+                self.datasets[domain] = apply_processors(
+                    dataset,
+                    self.pre_processor,
+                    tqdm_args=dict(desc=f"preprocess {domain}", total=len(dataset)),
+                )
 
     def _build_sampler(self, domain):
         if domain == "train":

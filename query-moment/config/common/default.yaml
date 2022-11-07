@@ -6,12 +6,11 @@ pipeline_verbose: ${debug}
 data:
   dataset: tacos
   dataset_dir: ${data_dir}/${data.dataset}
-  # vid_feat_type: i3d
-  vid_feat_type: uniformer.sd16
+  vid_feat_type: clip.video.avg.avg
   # upload_vocab_key: glove_vocab
   num_clip: 256
 
-  bert_pretrained: roberta-large
+  pretrained: openai/clip-vit-large-patch14-336
 
   pre_processors:
     # - type: glove_tokenize
@@ -21,19 +20,21 @@ data:
     #   from_key: text
     #   to_indices: true
     - type: hf_embedding
+      model_cls: CLIPTextModel
+      extractor_cls: CLIPTokenizer
       from_key: text
-      hash_key: sample_id
-      cache_dir: ${cache_dir}/${data.dataset}/${data.bert_pretrained}
-      pretrained: ${data.bert_pretrained}
+      pretrained: ${data.pretrained}
+      cache_args:
+        hash_key: sample_id
+        cache_dir: ${cache_dir}/${data.dataset}/${data.pretrained}
+        verbose: true
+        load_to_memory: true
 
   processors:
     - type: load_hdf5
       hdf5_file: ${data.dataset_dir}/${data.vid_feat_type}.hdf5
-      # path_template: "{}/cls"
+      path_template: "{}/patch"
       from_key: video_id
-    - type: load_npy
-      npy_dir: ${cache_dir}/${data.dataset}/${data.bert_pretrained}
-      hash_key: sample_id
     - type: seq_sample
       axis: 0
       max_len: ${data.num_clip}
@@ -45,14 +46,14 @@ data:
     - type: batch.seq_pad
       axis: 0
       fill_value: 0.0
-      from_key: sample_id_npy
+      from_key: text_embeddings
     - type: rename
       from_keys:
         [
           video_id_hdf5_sample_pad,
           video_id_hdf5_sample_mask,
-          sample_id_npy_pad,
-          sample_id_npy_mask,
+          text_embeddings_pad,
+          text_embeddings_mask,
         ]
       to_keys: [vid_feat, vid_mask, text_feat, text_mask]
     - type: collect
