@@ -10,8 +10,7 @@ import subprocess
 
 log = get_logger(__name__)
 
-
-def cache_filter(suffixes=[]):
+def cache_filter():
     def out_wrapper(fn):
         """
         from_key: [required]
@@ -23,56 +22,50 @@ def cache_filter(suffixes=[]):
             overwrite: [optional] False
 
         """
-
         def wrapper(self, result):
             cache_args = self.cache_args
-            if not cache_args:  # no cache
+            if not cache_args: # no cache
                 return fn(self, result)
-
+            
             # use cache
             if cache_args:
                 os.makedirs(cache_args["cache_dir"], exist_ok=True)
             cache_dir = cache_args["cache_dir"]
             hash_id = result.get(cache_args.get("hash_key"), hash(result[self.from_key]))
-            cache_files = [osp.join(cache_dir, self.from_key + suffix, f"{hash_id}.npy") for suffix in suffixes]
+            cache_file = osp.join(cache_dir, f"{hash_id}.hdf5")
             verbose = self.cache_args.get("verbose", False)
             load_to_memory = self.cache_args.get("load_to_memory", False)
             overwrite = self.cache_args.get("overwrite", False)
             # no matter whether loaded to memory, inference must run with cache configured
 
-            load_success = False
-            load_item = dict()
-            for idx, (suffix, cache_file) in enumerate(zip(suffixes, cache_files)):
-                if not overwrite and osp.exists(cache_file):  # succesful loaded
-                    try:
-                        to_key = self.from_key + suffix
-                        load_item.update({to_key: np.load(cache_file)})
-                        if verbose:
-                            log.info(f"cache loaded from {cache_file}")
-                    except:
-                        # load failed, run inference
-                        if verbose:
-                            log.info(
-                                f"{cache_file} is invalid and removed, inference will run"
-                            )
-                        subprocess.run(
-                            f"rm -rf {cache_file}", shell=True
-                        )  # delete invalid file
-                    if idx == len(cache_files) - 1:
-                        load_success = True
-            if load_success:
-                if load_to_memory:
-                    result.update(load_item)
+            if not overwrite and osp.exists(cache_file):  # succesful loaded
+                try:
+                    with h5py.File(cache_file, "r") as hdf5_handler:
+                        load_item = dict()
+                        for k in hdf5_handler.keys():
+                            load_item.update({k: np.array(hdf5_handler[k])})
                     if verbose:
-                        log.info(f"cache merged to result")
-                return result
+                        log.info(f"cache loaded from {cache_file}")
+                    if load_to_memory:
+                        result.update(load_item)
+                        if verbose:
+                            log.info(f"cache merged to result")
+                    return result
+                except:
+                    # load failed, run inference
+                    if verbose:
+                        log.info(
+                            f"{cache_file} is invalid and removed, inference will run"
+                        )
+                    subprocess.run(
+                        f"rm -rf {cache_file}", shell=True
+                    )  # delete invalid file
 
             # run and save
             result, load_item = fn(self, result, True)
-            for cache_file, suffix in zip(cache_files, suffixes):
-                os.makedirs(osp.dirname(cache_file), exist_ok=True)
-                to_key = self.from_key + suffix
-                np.save(cache_file, load_item[to_key])
+            with h5py.File(cache_file, "w") as hdf5_handler:
+                for k in load_item.keys():
+                    hdf5_handler.create_dataset(k, data=load_item[k])
             if verbose:
                 log.info(f"cache stored to {cache_file}")
             if load_to_memory:
@@ -87,11 +80,20 @@ def cache_filter(suffixes=[]):
 
 
 @global_registry.register_processor("hf_tokenizer")
-class HuggingfaceTokenizer:
-    def __init__(self, pretrained=None, from_key=None) -> None:
+class HuggingfaceExtractor:
+    def __init__(self, pretrained=None, extractor_cls="AutoTokenizer", from_key=None) -> None:
         assert pretrained is not None
-        self.tokenizer = AutoTokenizer.from_pretrained(pretrained)
+        self.extractor_cls = extractor_cls
+        self.pretrained = pretrained
         self.from_key = from_key
+    
+    def _build_with_hydra(self, built_cls):
+        cfg = {
+            "_target_": "transformers.{}.from_pretrained".format(built_cls),
+            "pretrained_model_name_or_path": self.pretrained,
+        }
+        instance = hydra.utils.instantiate(cfg)
+        return instance
 
     def __call__(self, result):
         text = result[self.from_key]
@@ -127,6 +129,7 @@ class HuggingfaceEmbedding:
         self.cache_args = cache_args
         self.pretrained = pretrained
 
+
     def _build_with_hydra(self, built_cls):
         cfg = {
             "_target_": "transformers.{}.from_pretrained".format(built_cls),
@@ -141,7 +144,7 @@ class HuggingfaceEmbedding:
         return model, extractor
 
     @torch.no_grad()
-    @cache_filter(["_embeddings"])
+    @cache_filter()
     def __call__(self, result, split_load_item=False):
         # split out load_item for convenience for cache_filter
         # cache_filter is able to decide whether merge load_item into result or latter

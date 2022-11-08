@@ -27,7 +27,7 @@ data:
       cache_args:
         hash_key: sample_id
         cache_dir: ${cache_dir}/${data.dataset}/${data.pretrained}
-        verbose: true
+        # verbose: true
         load_to_memory: true
 
   processors:
@@ -65,8 +65,8 @@ train:
   num_epoch: 12
   eval_epoch_interval: 1
   batch_size: 16
-  prefetch_factor: 2
-  num_workers: 0
+  prefetch_factor: 6
+  num_workers: 8
 
   optimizer:
     type: adam_w
