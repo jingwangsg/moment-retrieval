@@ -71,8 +71,6 @@ def model_inference(model, dataloader, args):
 
         cls_hidden_list += [cls_hidden]
         patch_hidden_list += [patch_hidden]
-    # cls_hidden = np.concatenate(cls_hidden_list, axis=0)
-    # patch_hidden = np.concatenate(patch_hidden_list, axis=0)
     cls_hidden = torch.concat(cls_hidden_list, dim=0)
     patch_hidden = torch.concat(patch_hidden_list, dim=0)
     cls_hidden = cls_hidden.cpu().detach().numpy()
@@ -116,7 +114,8 @@ def decode_video_to_images(video_path):
     os.makedirs(cur_image_dir, exist_ok=True)
     quiet_flag = "-hide_banner -loglevel error"
     subprocess.run(
-        f"ffmpeg {quiet_flag} -i {video_path} -frames:v {args.max_len} {osp.join(cur_image_dir, '%04d.png')}",
+        f"ffmpeg {quiet_flag} -i {video_path} -frames:v {args.max_len} \
+            -filter:v scale=224:224 {osp.join(cur_image_dir, '%04d.png')}",
         shell=True,
     )
     subprocess.run(f"cd {cur_image_dir} && touch .finish", shell=True)
@@ -132,6 +131,7 @@ def inference_single_video_with_images(model, image_dir, hdf5_handle: h5py.File,
         prefetch_factor=6,
         collate_fn=collater,
     )
+    import ipdb; ipdb.set_trace() #FIXME
     ret_dict = model_inference(model, dataloader, args)
     save_hdf5({video_id: ret_dict}, hdf5_handle)
 
@@ -148,7 +148,6 @@ if __name__ == "__main__":
     model = CLIPVisionModel.from_pretrained(args.pretrained)
     model = model.cuda()
     model.eval()
-    freeze_module(model)
     global_registry.register_object("model_config", model.config)
     # collate_fn = partial(collate_fn_builder, extractor=extractor)
 

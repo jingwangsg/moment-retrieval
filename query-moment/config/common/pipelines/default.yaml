@@ -1,0 +1,54 @@
+data:
+  pretrained:
+  extractor_cls: CLIPTokenizer
+  model_cls: CLIPTextModel
+  
+
+  pre_processors:
+    # - type: glove_tokenize
+    #   vocab_file: ${data.dataset_dir}/annot/vocab.txt
+    #   cache_dir: ${cache_dir}/.glove
+    #   upload_vocab_key: ${data.upload_vocab_key}
+    #   from_key: text
+    #   to_indices: true
+    - type: hf_embedding
+      model_cls: ${data.model_cls} 
+      extractor_cls: ${data.extractor_cls}
+      from_key: text
+      pretrained: ${data.text_enc.pretrained}
+      cache_args:
+        hash_key: sample_id
+        cache_dir: ${cache_dir}/${data.dataset}/${data.text_enc.pretrained}
+        # verbose: true
+        load_to_memory: true
+
+  processors:
+    - type: load_hdf5
+      hdf5_file: ${data.dataset_dir}/${data.vid_feat_type}.hdf5
+      path_template: "{}/patch"
+      from_key: video_id
+    - type: seq_sample
+      axis: 0
+      max_len: ${data.num_clip}
+      from_key: video_id_hdf5
+    - type: batch.seq_pad
+      axis: 0
+      fill_value: 0.0
+      from_key: video_id_hdf5_sample
+    - type: batch.seq_pad
+      axis: 0
+      fill_value: 0.0
+      from_key: text_embeddings
+    - type: rename
+      from_keys:
+        [
+          video_id_hdf5_sample_pad,
+          video_id_hdf5_sample_mask,
+          text_embeddings_pad,
+          text_embeddings_mask,
+        ]
+      to_keys: [vid_feat, vid_mask, text_feat, text_mask]
+    - type: collect
+      from_keys: [vid_feat, vid_mask, text_feat, text_mask, gt]
+
+  collater: default
