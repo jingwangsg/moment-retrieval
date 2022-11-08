@@ -47,9 +47,12 @@ if __name__ == "__main__":
     cfg = load_config(
         "/export/home2/kningtg/WORKSPACE/moment-retrieval/query-moment/config/common/default.yaml"
     )
-    cfg.debug = True
+    # cfg.debug = True
     datamodule = global_registry.build_datamodule("tacos", cfg=cfg)
-    x = iter(datamodule.get_dataloader("train")).__next__()
+    train_loader = datamodule.get_dataloader("train")
+    from tqdm import tqdm
+    for data in tqdm(train_loader):
+        pass
     import ipdb
 
     ipdb.set_trace()  # FIXME
