@@ -40,6 +40,7 @@ def parse_args():
     return parser.parse_args()
 
 
+@torch.no_grad()
 def model_inference(model, dataloader, args):
     model_config = global_registry.get_object("model_config")
     cls_hidden_list = []
@@ -69,12 +70,12 @@ def model_inference(model, dataloader, args):
             [0, 2, 3, 1]
         )
 
-        cls_hidden_list += [cls_hidden]
-        patch_hidden_list += [patch_hidden]
+        cls_hidden_list += [cls_hidden.detach()]
+        patch_hidden_list += [patch_hidden.detach()]
     cls_hidden = torch.concat(cls_hidden_list, dim=0)
     patch_hidden = torch.concat(patch_hidden_list, dim=0)
-    cls_hidden = cls_hidden.cpu().detach().numpy()
-    patch_hidden = patch_hidden.cpu().detach().numpy()
+    cls_hidden = cls_hidden.cpu().numpy()
+    patch_hidden = patch_hidden.cpu().numpy()
     return dict(cls=cls_hidden, patch=patch_hidden)
 
 
@@ -131,7 +132,6 @@ def inference_single_video_with_images(model, image_dir, hdf5_handle: h5py.File,
         prefetch_factor=6,
         collate_fn=collater,
     )
-    import ipdb; ipdb.set_trace() #FIXME
     ret_dict = model_inference(model, dataloader, args)
     save_hdf5({video_id: ret_dict}, hdf5_handle)
 

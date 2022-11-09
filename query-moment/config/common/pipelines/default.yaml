@@ -2,7 +2,6 @@ data:
   pretrained:
   extractor_cls: CLIPTokenizer
   model_cls: CLIPTextModel
-  
 
   pre_processors:
     # - type: glove_tokenize
@@ -12,7 +11,7 @@ data:
     #   from_key: text
     #   to_indices: true
     - type: hf_embedding
-      model_cls: ${data.model_cls} 
+      model_cls: ${data.model_cls}
       extractor_cls: ${data.extractor_cls}
       from_key: text
       pretrained: ${data.text_enc.pretrained}
