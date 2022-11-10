@@ -42,11 +42,10 @@ if __name__ == "__main__":
     import os.path as osp
 
     sys.path.insert(0, osp.join(osp.dirname(__file__), "../.."))
-    from kn_util.config import load_config
+    from detectron2.config import LazyConfig
 
-    cfg = load_config(
-        "/export/home2/kningtg/WORKSPACE/moment-retrieval/query-moment/config/common/default.yaml"
-    )
+    cfg = LazyConfig.load("../../config/common/default.py")
+
     # cfg.debug = True
     datamodule = global_registry.build_datamodule("tacos", cfg=cfg)
     train_loader = datamodule.get_dataloader("train")

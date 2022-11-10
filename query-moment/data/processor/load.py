@@ -4,8 +4,10 @@ from kn_util.file import load_pickle
 import os.path as osp
 import h5py
 import numpy as np
-import decord as de
+# import decord as de
 import os
+from PIL import Image
+import glob
 
 
 @global_registry.register_processor("load_cache")
@@ -62,6 +64,21 @@ class NumpyLoader:
         )
         return result
 
+@global_registry.register_processor("load_image")
+class ImageLoader:
+    def __init__(self, from_key=None):
+        self.from_key = from_key
+    
+    def __call__(self, result):
+        path = result[self.from_key]
+        if osp.isdir(result[self.from_key]):
+            img_paths = glob.glob(osp.join(path, "*.png")) + glob.glob(osp.join(path, "*.jpg"))
+            imgs = [Image.open(img_path).convert("RGB") for img_path in img_paths]
+            result[self.from_key + "_img"] = imgs
+        else:
+            result[self.from_key + "_img"] = Image.open(path).convert("RGB")
+        return result
+            
 
 @global_registry.register_processor("load_video_decord")
 class DecodeVideoLoader:

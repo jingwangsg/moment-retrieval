@@ -1,8 +1,15 @@
 from kn_util.general import import_modules
 import os.path as osp
 
-cur_dir = osp.dirname(__file__)
-import_modules(cur_dir, "data.processor")
+from .basic_ops import *
+from .batch import *
+from .huggingface import *
+from .load import *
+from .sample import *
+from .tokenize import *
+
+# cur_dir = osp.dirname(__file__)
+# import_modules(cur_dir, "data.processor")
 import copy
 from kn_util.debug import dict_diff
 from kn_util.general import global_registry, get_logger
@@ -47,9 +54,7 @@ def apply_single_processor(batch, processor, tqdm_args=None):
 
 def apply_processors(batch, processors, tqdm_args=None):
     for processor in processors:
-        apply_single_processor(
-            batch=batch, processor=processor, tqdm_args=tqdm_args
-        )
+        apply_single_processor(batch=batch, processor=processor, tqdm_args=tqdm_args)
     return batch
 
 

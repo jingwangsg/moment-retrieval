@@ -14,9 +14,9 @@ def cache_filter():
     def out_wrapper(fn):
         """
         from_key: [required]
-        hash_key: [optional]
         cache_args: [optional]
             cache_dir: [required]
+            hash_key: [optional]
             load_to_memory: [optional] False
             verbose: [optional] False
             overwrite: [optional] False
@@ -81,23 +81,14 @@ def cache_filter():
 
 @global_registry.register_processor("hf_tokenizer")
 class HuggingfaceExtractor:
-    def __init__(self, pretrained=None, extractor_cls="AutoTokenizer", from_key=None) -> None:
-        assert pretrained is not None
-        self.extractor_cls = extractor_cls
-        self.pretrained = pretrained
+    def __init__(self, extractor=None, from_key=None) -> None:
+        assert extractor is not None
+        self.extractor = extractor
         self.from_key = from_key
-    
-    def _build_with_hydra(self, built_cls):
-        cfg = {
-            "_target_": "transformers.{}.from_pretrained".format(built_cls),
-            "pretrained_model_name_or_path": self.pretrained,
-        }
-        instance = hydra.utils.instantiate(cfg)
-        return instance
 
     def __call__(self, result):
-        text = result[self.from_key]
-        result[self.from_key + "_inds"] = self.tokenizer(text).input_ids
+        data = result[self.from_key]
+        result[self.from_key + "_ext"] = self.extractor(data)
         return result
 
 
@@ -105,10 +96,8 @@ class HuggingfaceExtractor:
 class HuggingfaceEmbedding:
     def __init__(
         self,
-        model_cls="AutoModel",
-        extractor_cls="AutoTokenizer",
-        pretrained=None,
-        is_text=True,
+        model=None,
+        extractor=None,
         from_key=None,
         cache_args=None,
     ):
@@ -118,30 +107,14 @@ class HuggingfaceEmbedding:
             hash_key: [optional]
             verbose: [optional]
         """
-        assert from_key is not None and pretrained is not None
+        assert from_key is not None and model is not None and extractor is not None
         # to_embeddings=False means for latter use but not load it into memory now
         log.warn("[processor] hf_embedding may use cuda")
-        self.is_text = is_text
-        self.model_cls = model_cls
-        self.extractor_cls = extractor_cls
+        self.model = model
+        self.extractor = extractor
 
         self.from_key = from_key
         self.cache_args = cache_args
-        self.pretrained = pretrained
-
-
-    def _build_with_hydra(self, built_cls):
-        cfg = {
-            "_target_": "transformers.{}.from_pretrained".format(built_cls),
-            "pretrained_model_name_or_path": self.pretrained,
-        }
-        instance = hydra.utils.instantiate(cfg)
-        return instance
-
-    def _build_model_and_extractor(self):
-        model = self._build_with_hydra(self.model_cls)
-        extractor = self._build_with_hydra(self.extractor_cls)
-        return model, extractor
 
     @torch.no_grad()
     @cache_filter()
@@ -149,13 +122,6 @@ class HuggingfaceEmbedding:
         # split out load_item for convenience for cache_filter
         # cache_filter is able to decide whether merge load_item into result or latter
         data = result[self.from_key]
-        if not hasattr(self, "model"):
-            model, extractor = self._build_model_and_extractor()
-            model = model.cuda()
-            model.eval()
-            self.model = model
-            self.extractor = extractor
-
         model = self.model.cuda()
         inputs = self.extractor(data, return_tensors="pt")
         inputs = {k: v.cuda() for k, v in inputs.items()}

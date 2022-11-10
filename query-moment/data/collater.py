@@ -28,7 +28,7 @@ class DefaultCollater:
 
     def __call__(self, _batch):
         batch = copy.deepcopy(_batch)
-        with SignalContext(_signal, self.cfg.debug and self.not_verbose_yet):
+        with SignalContext(_signal, self.cfg.G.debug and self.not_verbose_yet):
             batch = apply_processors(batch, self.processors)
             self.not_verbose_yet = False  # only verbose on one batch
         feature_dict = self.get_feature_dict(batch)

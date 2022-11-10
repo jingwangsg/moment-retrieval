@@ -36,6 +36,7 @@ def parse_args():
     parser.add_argument("--max-len", default=512, type=int)
     parser.add_argument("--temporal-pool", default="avg", type=str)
     parser.add_argument("--spatial-pool", default="avg", type=str)
+    parser.add_argument("--overwrite", action="store_true", default=False)
 
     return parser.parse_args()
 
@@ -110,9 +111,10 @@ def collater(image_paths):
 def decode_video_to_images(video_path):
     video_id = osp.basename(video_path)[:-4]
     cur_image_dir = osp.join(image_root_dir, video_id)
-    if osp.exists(osp.join(cur_image_dir, ".finish")):
+    if not args.overwrite and osp.exists(osp.join(cur_image_dir, ".finish")):
         return
     os.makedirs(cur_image_dir, exist_ok=True)
+    subprocess.run(f"rm -rf {cur_image_dir}/*", shell=True)
     quiet_flag = "-hide_banner -loglevel error"
     subprocess.run(
         f"ffmpeg {quiet_flag} -i {video_path} -frames:v {args.max_len} \

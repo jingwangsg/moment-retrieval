@@ -30,6 +30,16 @@ class Rename:
 
         return result
 
+@global_registry.register_processor("lambda")
+class Lambda:
+    def __init__(self, _lambda, to_key):
+        self._lambda=_lambda
+        self.to_key = to_key
+    
+    def __call__(self, result):
+        result[self.to_key] = self._lambda(result)
+        return result
+
 
 @global_registry.register_processor("collect")
 class Collect:

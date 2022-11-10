@@ -40,7 +40,7 @@ class BaseDataModule:
             if domain != "train":
                 global_registry.set_object(_signal, False)
 
-            with SignalContext(_signal, self.cfg.debug and domain == "train"):
+            with SignalContext(_signal, self.cfg.G.debug and domain == "train"):
                 self.datasets[domain] = apply_processors(
                     dataset,
                     self.pre_processor,
