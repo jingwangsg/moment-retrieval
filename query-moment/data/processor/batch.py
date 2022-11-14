@@ -2,7 +2,6 @@ from kn_util.general import global_registry, get_logger
 from kn_util.data import general_pad
 
 
-@global_registry.register_processor("batch.seq_pad")
 class SequencePad:
     is_batch_processor = True
 

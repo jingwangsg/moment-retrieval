@@ -2,7 +2,6 @@ from kn_util.general import global_registry
 import numpy as np
 
 
-@global_registry.register_processor("seq_sample")
 class SequenceSampler:
     def __init__(self, axis=0, max_len=None, stride=None, from_key=None) -> None:
         assert (max_len is not None) ^ (stride is not None)

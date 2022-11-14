@@ -10,6 +10,7 @@ import subprocess
 
 log = get_logger(__name__)
 
+
 def cache_filter():
     def out_wrapper(fn):
         """
@@ -22,11 +23,12 @@ def cache_filter():
             overwrite: [optional] False
 
         """
+
         def wrapper(self, result):
             cache_args = self.cache_args
-            if not cache_args: # no cache
+            if not cache_args:  # no cache
                 return fn(self, result)
-            
+
             # use cache
             if cache_args:
                 os.makedirs(cache_args["cache_dir"], exist_ok=True)
@@ -79,7 +81,6 @@ def cache_filter():
     return out_wrapper
 
 
-@global_registry.register_processor("hf_tokenizer")
 class HuggingfaceExtractor:
     def __init__(self, extractor=None, from_key=None) -> None:
         assert extractor is not None
@@ -92,7 +93,6 @@ class HuggingfaceExtractor:
         return result
 
 
-@global_registry.register_processor("hf_embedding")
 class HuggingfaceEmbedding:
     def __init__(
         self,
@@ -135,21 +135,3 @@ class HuggingfaceEmbedding:
         else:
             result.update(load_item)
             return result
-
-
-# @global_registry.register_processor("hf_clip_embedding")
-# class HFClipEmbedding(HuggingfaceEmbedding):
-#     """for single branch in CLIP only"""
-
-#     def _build_model_and_extractor(self):
-#         if self.is_text:
-#             model = CLIPTextModel.from_pretrained(self.pretrained)
-#             extractor = CLIPTokenizer.from_pretrained(self.pretrained)
-#         else:
-#             model = CLIPVisionModel.from_pretrained(self.pretrained)
-#             extractor = CLIPVisionModel.from_pretrained(self.pretrained)
-#         if self.cache_args:  # to differentiate cliptext and clipvision
-#             suffix = "_txt" if self.is_text else "_vis"
-#             self.cache_args += suffix
-
-#         return model, extractor

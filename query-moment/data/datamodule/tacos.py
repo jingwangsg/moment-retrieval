@@ -44,12 +44,20 @@ if __name__ == "__main__":
     sys.path.insert(0, osp.join(osp.dirname(__file__), "../.."))
     from detectron2.config import LazyConfig
 
-    cfg = LazyConfig.load("../../config/common/default.py")
+    cfg = LazyConfig.load("../../config/deformable/deformable.py")
+    from pprint import pformat
+    from kn_util.general import get_logger
+
+    log = get_logger(__name__)
+    from omegaconf import OmegaConf
+
+    log.info("\n" + pformat(OmegaConf.to_container(cfg, resolve=False)))
 
     # cfg.debug = True
     datamodule = global_registry.build_datamodule("tacos", cfg=cfg)
     train_loader = datamodule.get_dataloader("train")
     from tqdm import tqdm
+
     for data in tqdm(train_loader):
         pass
     import ipdb

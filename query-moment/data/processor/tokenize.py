@@ -8,7 +8,6 @@ import numpy as np
 log = get_logger(__name__)
 
 
-@global_registry.register_processor("glove_tokenize")
 class GloveTokenizer:
     def __init__(
         self,

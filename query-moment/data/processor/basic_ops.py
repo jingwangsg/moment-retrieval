@@ -1,7 +1,6 @@
 from kn_util.general import global_registry
 
 
-@global_registry.register_processor("delete")
 class Delete:
     def __init__(self, from_keys=None) -> None:
         assert from_keys
@@ -14,7 +13,6 @@ class Delete:
         return result
 
 
-@global_registry.register_processor("rename")
 class Rename:
     def __init__(self, from_keys=None, to_keys=None) -> None:
         assert from_keys and to_keys
@@ -30,7 +28,6 @@ class Rename:
 
         return result
 
-@global_registry.register_processor("lambda")
 class Lambda:
     def __init__(self, _lambda, to_key):
         self._lambda=_lambda
@@ -41,7 +38,6 @@ class Lambda:
         return result
 
 
-@global_registry.register_processor("collect")
 class Collect:
     def __init__(self, from_keys=[]):
         self.from_keys = from_keys

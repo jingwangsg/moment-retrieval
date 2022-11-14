@@ -4,13 +4,13 @@ from kn_util.file import load_pickle
 import os.path as osp
 import h5py
 import numpy as np
+
 # import decord as de
 import os
 from PIL import Image
 import glob
 
 
-@global_registry.register_processor("load_cache")
 class LoadOrCache:
     def __init__(self, cache_dir=None, hash_key=None, from_key=None) -> None:
         assert cache_dir and from_key
@@ -34,7 +34,6 @@ class LoadOrCache:
         return batch
 
 
-@global_registry.register_processor("load_hdf5")
 class HDF5Loader:
     def __init__(self, hdf5_file, path_template="{}", from_key=None) -> None:
         assert from_key
@@ -49,7 +48,6 @@ class HDF5Loader:
         return result
 
 
-@global_registry.register_processor("load_npy")
 class NumpyLoader:
     def __init__(self, npy_dir=None, path_template="{}.npy", hash_key=None):
         assert npy_dir and hash_key
@@ -64,23 +62,25 @@ class NumpyLoader:
         )
         return result
 
+
 @global_registry.register_processor("load_image")
 class ImageLoader:
     def __init__(self, from_key=None):
         self.from_key = from_key
-    
+
     def __call__(self, result):
         path = result[self.from_key]
         if osp.isdir(result[self.from_key]):
-            img_paths = glob.glob(osp.join(path, "*.png")) + glob.glob(osp.join(path, "*.jpg"))
+            img_paths = glob.glob(osp.join(path, "*.png")) + glob.glob(
+                osp.join(path, "*.jpg")
+            )
             imgs = [Image.open(img_path).convert("RGB") for img_path in img_paths]
             result[self.from_key + "_img"] = imgs
         else:
             result[self.from_key + "_img"] = Image.open(path).convert("RGB")
         return result
-            
 
-@global_registry.register_processor("load_video_decord")
+
 class DecodeVideoLoader:
     def __init__(
         self,
