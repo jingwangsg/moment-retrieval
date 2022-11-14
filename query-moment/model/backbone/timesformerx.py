@@ -6,7 +6,7 @@ from kn_util.nn import clones
 import numpy as np
 
 
-class VideoTextAttention(nn.Module):
+class TimeSFormerXAttention(nn.Module):
     def __init__(self, d_model, num_head, dropout) -> None:
         super().__init__()
         d_head = d_model // num_head
@@ -101,7 +101,7 @@ class VideoTextAttention(nn.Module):
         return vid_feat, txt_feat
 
 
-class VideoTextOutput(nn.Module):
+class TimeSFormerXOutput(nn.Module):
     def __init__(self, d_model, ff_dim, dropout) -> None:
         super().__init__()
         self.ffn_vid = nn.Sequential(
@@ -125,17 +125,17 @@ class VideoTextOutput(nn.Module):
         return vid_feat, txt_feat
 
 
-class VideoTextEncoderLayer(nn.Module):
+class TimeSFormerXEncoderLayer(nn.Module):
     def __init__(self, d_model, num_head, ff_dim, dropout) -> None:
         super().__init__()
         self.temporal_attn = nn.MultiheadAttention(
             d_model, num_head, dropout, batch_first=True
         )
         self.temporal_ln = nn.LayerNorm(d_model, eps=1e-12)
-        self.cross_attn = VideoTextAttention(
+        self.cross_attn = TimeSFormerXAttention(
             d_model=d_model, num_head=num_head, dropout=dropout
         )
-        self.output = VideoTextOutput(d_model, ff_dim, dropout)
+        self.output = TimeSFormerXOutput(d_model, ff_dim, dropout)
 
     def forward(self, vid_feat, vid_mask, txt_feat, txt_mask):
         """
@@ -164,7 +164,7 @@ class VideoTextEncoderLayer(nn.Module):
         return vid_feat, txt_feat
 
 
-class VideoTextEncoder(nn.Module):
+class TimeSFormerXEncoder(nn.Module):
     def __init__(self, layer, num_layer) -> None:
         super().__init__()
         self.layers = clones(layer, num_layer)
@@ -208,10 +208,10 @@ class TimeSFormerX(nn.Module):
         self.vid_ln = nn.LayerNorm(d_model, eps=1e-12)
         self.txt_ln = nn.LayerNorm(d_model, eps=1e-12)
 
-        layer = VideoTextEncoderLayer(
+        layer = TimeSFormerXEncoderLayer(
             d_model=d_model, num_head=num_head, ff_dim=ff_dim, dropout=dropout
         )
-        self.encoder = VideoTextEncoder(layer, num_layer)
+        self.encoder = TimeSFormerXOutput(layer, num_layer)
 
     def _get_embedding(self, vid_feat, txt_feat):
         B, Lv, H, W, _ = vid_feat.shape

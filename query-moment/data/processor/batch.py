@@ -1,4 +1,4 @@
-from kn_util.general import global_registry, get_logger
+from kn_util.general import registry, get_logger
 from kn_util.data import general_pad
 
 

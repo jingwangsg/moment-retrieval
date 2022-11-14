@@ -11,19 +11,22 @@ from torch.utils.data import (
     DataLoader,
 )
 from data.processor import build_processors, apply_processors
-from kn_util.general import global_registry, get_logger
+from kn_util.general import registry, get_logger
 from kn_util.debug import explore_content
+import pytorch_lightning as pl
 
 log = get_logger(__name__)
 _signal = "_TEST_PIPELINE_SIGNAL"
 
 
-class BaseDataModule:
-    def __init__(self, cfg):
+class BaseDataModule(pl.LightningDataModule):
+    def __init__(self, cfg) -> None:
+        super().__init__()
         self.cfg = cfg
+    
+    def prepare_data(self) -> None:
         self.load_data()
         self.preprocess()
-        self.build_dataloaders()
 
     def load_data(self):
         """to be implemented in sub-class"""
@@ -38,7 +41,7 @@ class BaseDataModule:
             dataset = self.datasets[domain]
 
             if domain != "train":
-                global_registry.set_object(_signal, False)
+                registry.set_object(_signal, False)
 
             with SignalContext(_signal, self.cfg.G.debug and domain == "train"):
                 self.datasets[domain] = apply_processors(
@@ -49,33 +52,37 @@ class BaseDataModule:
 
     def _build_sampler(self, domain):
         if domain == "train":
-            if self.cfg.get("ddp", False):
-                return DistributedSampler(self.datasets[domain])
-            else:
-                return RandomSampler(self.datasets[domain])
+            return RandomSampler(self.datasets[domain])
         else:
             return SequentialSampler(self.datasets[domain])
 
-    def build_dataloaders(self):
+    def build_dataloaders(self, domain):
         cfg = self.cfg
         processors = build_processors(cfg.data.processors)
         self.dataloaders = dict()
-        for domain in ["train", "val", "test"]:
-            collater = global_registry.build_collater(
-                cfg.data.collater,
-                cfg=cfg,
-                processors=processors,
-                is_train=(domain == "train"),
-            )
-            sampler = self._build_sampler(domain)
-            self.dataloaders[domain] = DataLoader(
-                self.datasets[domain],
-                batch_size=cfg.train.batch_size,
-                sampler=sampler,
-                prefetch_factor=cfg.train.prefetch_factor,
-                num_workers=cfg.train.num_workers,
-                collate_fn=collater,
-            )
+        collater = registry.build_collater(
+            cfg.data.collater,
+            cfg=cfg,
+            processors=processors,
+            is_train=(domain == "train"),
+        )
+        sampler = self._build_sampler(domain)
+        return DataLoader(
+            self.datasets[domain],
+            batch_size=cfg.train.batch_size,
+            sampler=sampler,
+            prefetch_factor=cfg.train.prefetch_factor,
+            num_workers=cfg.train.num_workers,
+            collate_fn=collater,
+        )
 
-    def get_dataloader(self, domain):
-        return self.dataloaders[domain]
+    def train_dataloader(self):
+        return self.build_dataloaders("train")
+    
+    def val_dataloader(self):
+        return self.build_dataloaders("val")
+    
+    def test_dataloader(self):
+        return self.build_dataloaders("test")
+    
+    

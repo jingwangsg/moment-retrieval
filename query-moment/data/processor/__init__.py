@@ -12,7 +12,7 @@ from .tokenize import *
 # import_modules(cur_dir, "data.processor")
 import copy
 from kn_util.debug import dict_diff
-from kn_util.general import global_registry, get_logger
+from kn_util.general import registry, get_logger
 import time
 from pprint import pformat
 from tqdm import tqdm
@@ -28,7 +28,7 @@ def processor_profiler(fn):
         elem_copy = copy.copy(batch[0])
         _st = time.time()
         ret = fn(**kwargs)
-        verbose = global_registry.get_object(_signal, False)
+        verbose = registry.get_object(_signal, False)
         if verbose:
             log.info(
                 f"\napply [processor] {type(processor).__name__} (costs {time.time() - _st:3f} s)\n"
@@ -61,7 +61,7 @@ def apply_processors(batch, processors, tqdm_args=None):
 def build_processors(processors_cfg):
     processors = []
     for processor_cfg in processors_cfg:
-        processors += [global_registry.build_from_cfg(processor_cfg, "processor")]
+        processors += [registry.build_from_cfg(processor_cfg, "processor")]
     log.info("\n===============processors built==============\n" + pformat(processors))
 
     return processors

@@ -1,4 +1,4 @@
-from kn_util.general import global_registry
+from kn_util.general import registry
 from kn_util.data import generate_sample_indices
 from kn_util.file import load_pickle
 import os.path as osp
@@ -28,7 +28,7 @@ class LoadOrCache:
 
             if not load_fail:  # safe load for big file
                 return
-        global_registry.register_object(
+        registry.register_object(
             f"@{id(self)}", True
         )  # cache signal for later caching
         return batch
@@ -63,7 +63,7 @@ class NumpyLoader:
         return result
 
 
-@global_registry.register_processor("load_image")
+@registry.register_processor("load_image")
 class ImageLoader:
     def __init__(self, from_key=None):
         self.from_key = from_key

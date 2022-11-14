@@ -2,14 +2,14 @@ import sys
 import os.path as osp
 
 sys.path.insert(0, osp.join(osp.dirname(__file__), "../.."))
-from kn_util.general import global_registry
+from kn_util.general import registry
 from kn_util.file import load_json
 from data.datamodule.base import BaseDataModule
 import os.path as osp
 import numpy as np
 
 
-@global_registry.register_datamodule("tacos")
+@registry.register_datamodule("tacos")
 class TACoSDataModule(BaseDataModule):
     def load_data(self):
         self.datasets = dict()
@@ -54,8 +54,9 @@ if __name__ == "__main__":
     log.info("\n" + pformat(OmegaConf.to_container(cfg, resolve=False)))
 
     # cfg.debug = True
-    datamodule = global_registry.build_datamodule("tacos", cfg=cfg)
-    train_loader = datamodule.get_dataloader("train")
+    datamodule = registry.build_datamodule("tacos", cfg=cfg)
+    datamodule.prepare_data()
+    train_loader = datamodule.train_dataloader()
     from tqdm import tqdm
 
     for data in tqdm(train_loader):

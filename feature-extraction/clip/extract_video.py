@@ -14,7 +14,7 @@ from tqdm import tqdm
 import subprocess
 
 sys.path.insert(0, osp.join(osp.dirname(__file__), ".."))
-from kn_util.general import global_registry
+from kn_util.general import registry
 from kn_util.nn import freeze_module
 from kn_util.data import generate_sample_indices
 from kn_util.file import save_hdf5
@@ -43,7 +43,7 @@ def parse_args():
 
 @torch.no_grad()
 def model_inference(model, dataloader, args):
-    model_config = global_registry.get_object("model_config")
+    model_config = registry.get_object("model_config")
     cls_hidden_list = []
     patch_hidden_list = []
     for batch in dataloader:
@@ -150,7 +150,7 @@ if __name__ == "__main__":
     model = CLIPVisionModel.from_pretrained(args.pretrained)
     model = model.cuda()
     model.eval()
-    global_registry.register_object("model_config", model.config)
+    registry.register_object("model_config", model.config)
     # collate_fn = partial(collate_fn_builder, extractor=extractor)
 
     video_paths = glob.glob(osp.join(video_dir, "*"))

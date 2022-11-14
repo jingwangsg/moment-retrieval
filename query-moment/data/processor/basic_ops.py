@@ -1,4 +1,4 @@
-from kn_util.general import global_registry
+from kn_util.general import registry
 
 
 class Delete:

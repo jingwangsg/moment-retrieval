@@ -55,7 +55,8 @@ collect = L(Collect)(from_keys=["vid_feat", "vid_mask", "text_feat", "text_mask"
 
 pipeline_cfg.update(
     dict(
-        pre_processors=[load_hf_embeddings_txt_no_load],
+        # pre_processors=[load_hf_embeddings_txt_no_load],
+        pre_processors=[],
         processors=[
             load_hf_embeddings_txt_load,
             pad_txt,

@@ -8,13 +8,13 @@ from .processor import apply_processors
 import copy
 from typing import Dict, List, Any
 import numpy as np
-from kn_util.general import global_registry
+from kn_util.general import registry
 from kn_util.debug import SignalContext
 from collections import OrderedDict
 
 _signal = "_TEST_PIPELINE_SIGNAL"
 
-@global_registry.register_collater("default")
+@registry.register_collater("default")
 class DefaultCollater:
     def __init__(self, cfg, processors, is_train) -> None:
         self.cfg = cfg
