@@ -4,22 +4,7 @@ import torch.nn.functional as F
 from typing import List
 from einops import rearrange, repeat
 from detectron2.config import instantiate
-
-class SetCriterion(nn.Module):
-    def __init__(self, loss_cfgs) -> None:
-        super().__init__()
-        self.loss_cfgs = loss_cfgs
-
-    def forward(self, **kwargs):
-        tot_loss = 0.0
-        for loss_cfg in self.loss_cfgs:
-            # dispatch output to multiple losses
-            for k, v in kwargs.items():
-                if hasattr(loss_cfg, k):
-                    loss_cfg[k] = kwargs[k]
-            tot_loss += instantiate(loss_cfg)
-        return tot_loss
-
+from misc import calc_iou_score_gt
 
 def l1_loss(pred_bds, gt, loss_weight=1.0):
     if isinstance(pred_bds, torch.Tensor):
@@ -52,27 +37,6 @@ def dist_loss(pred_logits, gt_span, loss_weight=1.0, loss_fn=F.kl_div):
             loss += loss_fn(pred_score, expand_gt, reduction="mean")
         return loss * loss_weight
 
-def calc_iou_score_gt(pred_bds, gt, type="iou"):
-    """make sure the range between [0, 1) to make loss function happy"""
-    min_ed = torch.minimum(pred_bds[:, 1], gt[:, 1])
-    max_ed = torch.maximum(pred_bds[:, 1], gt[:, 1])
-    min_st = torch.minimum(pred_bds[:, 0], gt[:, 0])
-    max_st = torch.maximum(pred_bds[:, 0], gt[:, 0])
-    
-    I = torch.maximum(min_ed - max_st, torch.zeros_like(min_ed, dtype=torch.float, device=pred_bds.device))
-    area_pred = pred_bds[1] - pred_bds[1]
-    area_gt = gt[1] - gt[0]
-    U = area_pred + area_gt - I
-    Ac = max_ed - min_st
-
-    iou = I / U
-
-    if type == "iou":
-        return iou
-    elif type == "giou":
-        return 0.5 * (iou + U / Ac)
-    else:
-        raise NotImplementedError()
 
 
 def focal_loss(iou_scores, pred_bds, gt, alpha=2, iou_type="iou", loss_weight=1.0):

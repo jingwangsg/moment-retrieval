@@ -4,6 +4,7 @@ from kn_util.file import load_pickle
 import os.path as osp
 import h5py
 import numpy as np
+from kn_util.file import load_hdf5
 
 # import decord as de
 import os
@@ -11,44 +12,26 @@ from PIL import Image
 import glob
 
 
-class LoadOrCache:
-    def __init__(self, cache_dir=None, hash_key=None, from_key=None) -> None:
-        assert cache_dir and from_key
-        self.cache_dir = cache_dir
-        self.hash_key = hash_key
-        self.from_key = from_key
-
-    def __call__(self, batch):
-        if osp.exists(self.cache_path):
-            try:
-                self.datasets = load_pickle(self.cache_path)
-                load_fail = True
-            except:
-                load_fail = False
-
-            if not load_fail:  # safe load for big file
-                return
-        registry.register_object(
-            f"@{id(self)}", True
-        )  # cache signal for later caching
-        return batch
-
-
 class HDF5Loader:
-    def __init__(self, hdf5_file, path_template="{}", from_key=None) -> None:
+
+    def __init__(self, hdf5_file, key_template="{}", from_key=None) -> None:
         assert from_key
         self.handle = h5py.File(hdf5_file, "r")
         self.from_key = from_key
-        self.path_template = path_template
+        self.key_template = key_template
 
     def __call__(self, result):
         ind = result[self.from_key]
-        result[self.from_key + "_hdf5"] = self.handle[self.path_template.format(ind)]
+        item = load_hdf5(self.handle[self.key_template.format(ind)])
+        if not isinstance(item, dict):
+            item = {self.from_key + ".hdf5": item}
+        result.update(item)
 
         return result
 
 
 class NumpyLoader:
+
     def __init__(self, npy_dir=None, path_template="{}.npy", hash_key=None):
         assert npy_dir and hash_key
         self.npy_dir = npy_dir
@@ -57,14 +40,14 @@ class NumpyLoader:
 
     def __call__(self, result):
         hash_entry = result[self.hash_key]
-        result[self.hash_key + "_npy"] = np.load(
-            osp.join(self.npy_dir, self.path_template.format(hash_entry))
-        )
+        result[self.hash_key + ".npy"] = np.load(
+            osp.join(self.npy_dir, self.path_template.format(hash_entry)))
         return result
 
 
 @registry.register_processor("load_image")
 class ImageLoader:
+
     def __init__(self, from_key=None):
         self.from_key = from_key
 
@@ -72,16 +55,18 @@ class ImageLoader:
         path = result[self.from_key]
         if osp.isdir(result[self.from_key]):
             img_paths = glob.glob(osp.join(path, "*.png")) + glob.glob(
-                osp.join(path, "*.jpg")
-            )
-            imgs = [Image.open(img_path).convert("RGB") for img_path in img_paths]
-            result[self.from_key + "_img"] = imgs
+                osp.join(path, "*.jpg"))
+            imgs = [
+                Image.open(img_path).convert("RGB") for img_path in img_paths
+            ]
+            result[self.from_key + ".img"] = imgs
         else:
-            result[self.from_key + "_img"] = Image.open(path).convert("RGB")
+            result[self.from_key + ".img"] = Image.open(path).convert("RGB")
         return result
 
 
 class DecodeVideoLoader:
+
     def __init__(
         self,
         max_len=None,
@@ -113,8 +98,7 @@ class DecodeVideoLoader:
         tot_len = len(vr)
 
         sampled_indices = generate_sample_indices(
-            tot_len, self.max_len, self.stride, output_stride=True
-        )
+            tot_len, self.max_len, self.stride, output_stride=True)
         arr = vr.get_batch(sampled_indices).asnumpy()
 
         if self.cache_dir:

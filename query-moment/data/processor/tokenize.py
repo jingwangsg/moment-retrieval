@@ -83,10 +83,10 @@ class GloveTokenizer:
         text_inds = np.array([self.stoi.get(w, 1) for w in text_tok])
         text_embeddings = np.stack([self.vectors[ind] for ind in text_inds], axis=0)
         if self.to_words:
-            result[self.from_key + "_tok"] = text_tok
+            result[self.from_key + ".tok"] = text_tok
         if self.to_indices:
-            result[self.from_key + "_inds"] = text_inds
+            result[self.from_key + ".inds"] = text_inds
         if self.to_embeddings:
-            result[self.from_key + "_embs"] = text_embeddings
+            result[self.from_key + ".embs"] = text_embeddings
 
         return result

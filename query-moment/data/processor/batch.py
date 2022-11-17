@@ -19,8 +19,8 @@ class SequencePad:
         else:
             padded_val = ret
         for idx, e in enumerate(batch):
-            e[self.from_key + "_pad"] = padded_val[idx]
+            e[self.from_key + ".pad"] = padded_val[idx]
             if self.return_mask:
-                e[self.from_key + "_mask"] = padded_mask[idx]
+                e[self.from_key + ".mask"] = padded_mask[idx]
 
         return batch

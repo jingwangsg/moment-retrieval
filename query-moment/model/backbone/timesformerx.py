@@ -7,6 +7,7 @@ import numpy as np
 
 
 class TimeSFormerXAttention(nn.Module):
+
     def __init__(self, d_model, num_head, dropout) -> None:
         super().__init__()
         d_head = d_model // num_head
@@ -38,7 +39,8 @@ class TimeSFormerXAttention(nn.Module):
             h=self.num_head,
             dh=self.d_head,
         )
-        attn_logits = einsum(feat_q, feat_k, "b lv lq h dh, b lv lk h dh->b lv h lq lk")
+        attn_logits = einsum(feat_q, feat_k,
+                             "b lv lq h dh, b lv lk h dh->b lv h lq lk")
         attn_mask = repeat(
             einsum(mask_q, mask_k, "b lq, b lk->b lq lk"),
             "b lq lk->b lv h lq lk",
@@ -59,25 +61,23 @@ class TimeSFormerXAttention(nn.Module):
         t2v_value = self.t2v_proj[2](txt_feat)
         v_value = torch.cat([v2v_value, t2v_value], dim=2)
         mask_hw = torch.ones((B, HW), device=vid_feat.device, dtype=torch.bool)
-        v_value = rearrange(v_value, "b lv lk (h dh)->b lv lk h dh", h=self.num_head)
+        v_value = rearrange(
+            v_value, "b lv lk (h dh)->b lv lk h dh", h=self.num_head)
 
         v2t_value = self.v2t_proj[2](vid_feat)
         t2t_value = self.t2t_proj[2](txt_feat)
         t_value = torch.cat([v2t_value, t2t_value], dim=2)
-        t_value = rearrange(t_value, "b lv lk (h dh)->b lv lk h dh", h=self.num_head)
+        t_value = rearrange(
+            t_value, "b lv lk (h dh)->b lv lk h dh", h=self.num_head)
 
-        v2v_logits = self.get_attn_logits(
-            vid_feat, mask_hw, vid_feat, mask_hw, vid_mask, self.v2v_proj
-        )
-        t2v_logits = self.get_attn_logits(
-            txt_feat, txt_mask, vid_feat, mask_hw, vid_mask, self.t2v_proj
-        )
-        v2t_logits = self.get_attn_logits(
-            vid_feat, mask_hw, txt_feat, txt_mask, vid_mask, self.v2t_proj
-        )
-        t2t_logits = self.get_attn_logits(
-            txt_feat, txt_mask, txt_feat, txt_mask, vid_mask, self.t2t_proj
-        )
+        v2v_logits = self.get_attn_logits(vid_feat, mask_hw, vid_feat, mask_hw,
+                                          vid_mask, self.v2v_proj)
+        t2v_logits = self.get_attn_logits(txt_feat, txt_mask, vid_feat,
+                                          mask_hw, vid_mask, self.t2v_proj)
+        v2t_logits = self.get_attn_logits(vid_feat, mask_hw, txt_feat,
+                                          txt_mask, vid_mask, self.v2t_proj)
+        t2t_logits = self.get_attn_logits(txt_feat, txt_mask, txt_feat,
+                                          txt_mask, vid_mask, self.t2t_proj)
 
         v_logits = torch.cat([v2v_logits, t2v_logits], dim=-1)
         v_logits = self.do(v_logits)
@@ -102,6 +102,7 @@ class TimeSFormerXAttention(nn.Module):
 
 
 class TimeSFormerXOutput(nn.Module):
+
     def __init__(self, d_model, ff_dim, dropout) -> None:
         super().__init__()
         self.ffn_vid = nn.Sequential(
@@ -126,15 +127,14 @@ class TimeSFormerXOutput(nn.Module):
 
 
 class TimeSFormerXEncoderLayer(nn.Module):
+
     def __init__(self, d_model, num_head, ff_dim, dropout) -> None:
         super().__init__()
         self.temporal_attn = nn.MultiheadAttention(
-            d_model, num_head, dropout, batch_first=True
-        )
+            d_model, num_head, dropout, batch_first=True)
         self.temporal_ln = nn.LayerNorm(d_model, eps=1e-12)
         self.cross_attn = TimeSFormerXAttention(
-            d_model=d_model, num_head=num_head, dropout=dropout
-        )
+            d_model=d_model, num_head=num_head, dropout=dropout)
         self.output = TimeSFormerXOutput(d_model, ff_dim, dropout)
 
     def forward(self, vid_feat, vid_mask, txt_feat, txt_mask):
@@ -155,7 +155,8 @@ class TimeSFormerXEncoderLayer(nn.Module):
         )
         vid_feat = self.temporal_ln(vid_feat + vid_feat_attn)
         vid_feat = rearrange(vid_feat, "(b hw) lv d -> b lv hw d", b=B, hw=HW)
-        vid_feat_, txt_feat_ = self.cross_attn(vid_feat, vid_mask, txt_feat, txt_mask)
+        vid_feat_, txt_feat_ = self.cross_attn(vid_feat, vid_mask, txt_feat,
+                                               txt_mask)
         vid_feat = vid_feat + vid_feat_
         txt_feat = txt_feat + txt_feat_
 
@@ -165,6 +166,7 @@ class TimeSFormerXEncoderLayer(nn.Module):
 
 
 class TimeSFormerXEncoder(nn.Module):
+
     def __init__(self, layer, num_layer) -> None:
         super().__init__()
         self.layers = clones(layer, num_layer)
@@ -181,6 +183,7 @@ class TimeSFormerXEncoder(nn.Module):
 class TimeSFormerX(nn.Module):
     """Similar to devided space-time attention in TimeSFormer
     Except we incorporate text tokens at spatial attention stage for cross modal interaction
+    Cross Attention imitates mechanism from Multi-Stage Aggregtion Transformer
     """
 
     def __init__(
@@ -209,24 +212,25 @@ class TimeSFormerX(nn.Module):
         self.txt_ln = nn.LayerNorm(d_model, eps=1e-12)
 
         layer = TimeSFormerXEncoderLayer(
-            d_model=d_model, num_head=num_head, ff_dim=ff_dim, dropout=dropout
-        )
-        self.encoder = TimeSFormerXOutput(layer, num_layer)
+            d_model=d_model, num_head=num_head, ff_dim=ff_dim, dropout=dropout)
+        self.encoder = TimeSFormerXEncoder(layer, num_layer)
 
     def _get_embedding(self, vid_feat, txt_feat):
         B, Lv, H, W, _ = vid_feat.shape
         B, Lt, _ = txt_feat.shape
 
-        vid_feat = rearrange(self.vid_proj(vid_feat), "b lv h w d -> b (lv h w) d")
-        vid_feat = self.vid_ln(
-            vid_feat + self.vid_pe.weight[None, : vid_feat.shape[1]] + self.type_embed_vid
-        )
-        vid_feat = rearrange(vid_feat, "b (lv h w) d -> b lv (h w) d", lv=Lv, h=H, w=W)
+        vid_feat = rearrange(
+            self.vid_proj(vid_feat), "b lv h w d -> b (lv h w) d")
+        vid_feat = self.vid_ln(vid_feat +
+                               self.vid_pe.weight[None, :vid_feat.shape[1]] +
+                               self.type_embed_vid)
+        vid_feat = rearrange(
+            vid_feat, "b (lv h w) d -> b lv (h w) d", lv=Lv, h=H, w=W)
 
         txt_feat = self.txt_proj(txt_feat)
-        txt_feat = self.txt_ln(
-            txt_feat + self.txt_pe.weight[None, : txt_feat.shape[1]] + self.type_embed_txt
-        )
+        txt_feat = self.txt_ln(txt_feat +
+                               self.txt_pe.weight[None, :txt_feat.shape[1]] +
+                               self.type_embed_txt)
 
         return vid_feat, txt_feat
 
@@ -235,7 +239,8 @@ class TimeSFormerX(nn.Module):
         B, Lt, _ = txt_feat.shape
 
         vid_feat, txt_feat = self._get_embedding(vid_feat, txt_feat)
-        vid_feat, txt_feat = self.encoder(vid_feat, vid_mask, txt_feat, txt_mask)
+        vid_feat, txt_feat = self.encoder(vid_feat, vid_mask, txt_feat,
+                                          txt_mask)
 
         vid_feat = rearrange(vid_feat, "b lv (h w) d -> b lv h w d", h=H, w=W)
 
@@ -256,12 +261,17 @@ if __name__ == "__main__":
     model = model.cuda()
     B = 16
     Lv = 128
+    from kn_util.debug import capture_forward_and_print
+    for idx, layer in enumerate(model.encoder.layers):
+        layer.forward = capture_forward_and_print(name=f"EncoderLayer{idx}")(
+            layer.forward)
     vid_feat, txt_feat = model(
         vid_feat=torch.randn((B, Lv, 6, 6, 1024), device="cuda"),
         vid_mask=torch.ones((B, Lv), dtype=torch.bool, device="cuda"),
         txt_feat=torch.randn((B, 16, 768), device="cuda"),
         txt_mask=torch.ones((B, 16), dtype=torch.bool, device="cuda"),
     )
+
     print(torch.cuda.max_memory_allocated("cuda") / (1024**3))
     import ipdb
 

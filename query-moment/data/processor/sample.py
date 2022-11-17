@@ -1,7 +1,6 @@
 from kn_util.general import registry
 import numpy as np
 
-
 class SequenceSampler:
     def __init__(self, axis=0, max_len=None, stride=None, from_key=None) -> None:
         assert (max_len is not None) ^ (stride is not None)
@@ -29,7 +28,7 @@ class SequenceSampler:
         sampled_seq = seq[tuple(slices)]
         slices[axis] = -1
         last = seq[tuple(slices)]
-        result[self.from_key + "_sample"] = np.concatenate(
+        result[self.from_key + ".sample"] = np.concatenate(
             [sampled_seq, np.expand_dims(last, axis)], axis=axis
         )
         return result

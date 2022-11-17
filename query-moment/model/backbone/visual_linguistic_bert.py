@@ -7,6 +7,7 @@ import numpy as np
 
 
 class VideoTextAttention(nn.Module):
+
     def __init__(self, d_model, num_head, dropout) -> None:
         super().__init__()
         d_head = d_model // num_head
@@ -63,18 +64,14 @@ class VideoTextAttention(nn.Module):
         t_value = torch.cat([v2t_value, t2t_value], dim=1)
         t_value = rearrange(t_value, "b lk (h dh)->b lk h dh", h=self.num_head)
 
-        v2v_logits = self.get_attn_logits(
-            vid_feat, vid_mask, vid_feat, vid_mask, self.v2v_proj
-        )
-        t2v_logits = self.get_attn_logits(
-            txt_feat, txt_mask, vid_feat, vid_mask, self.t2v_proj
-        )
-        v2t_logits = self.get_attn_logits(
-            vid_feat, vid_mask, txt_feat, txt_mask, self.v2t_proj
-        )
-        t2t_logits = self.get_attn_logits(
-            txt_feat, txt_mask, txt_feat, txt_mask, self.t2t_proj
-        )
+        v2v_logits = self.get_attn_logits(vid_feat, vid_mask, vid_feat,
+                                          vid_mask, self.v2v_proj)
+        t2v_logits = self.get_attn_logits(txt_feat, txt_mask, vid_feat,
+                                          vid_mask, self.t2v_proj)
+        v2t_logits = self.get_attn_logits(vid_feat, vid_mask, txt_feat,
+                                          txt_mask, self.v2t_proj)
+        t2t_logits = self.get_attn_logits(txt_feat, txt_mask, txt_feat,
+                                          txt_mask, self.t2t_proj)
 
         v_logits = torch.cat([v2v_logits, t2v_logits], dim=-1)
         v_logits = self.do(v_logits)
@@ -99,6 +96,7 @@ class VideoTextAttention(nn.Module):
 
 
 class VideoTextOutput(nn.Module):
+
     def __init__(self, d_model, ff_dim, dropout) -> None:
         super().__init__()
         self.ffn_vid = nn.Sequential(
@@ -123,11 +121,11 @@ class VideoTextOutput(nn.Module):
 
 
 class VideoTextEncoderLayer(nn.Module):
+
     def __init__(self, d_model, num_head, ff_dim, dropout) -> None:
         super().__init__()
         self.cross_attn = VideoTextAttention(
-            d_model=d_model, num_head=num_head, dropout=dropout
-        )
+            d_model=d_model, num_head=num_head, dropout=dropout)
         self.output = VideoTextOutput(d_model, ff_dim, dropout)
 
     def forward(self, vid_feat, vid_mask, txt_feat, txt_mask):
@@ -138,7 +136,8 @@ class VideoTextEncoderLayer(nn.Module):
         """
         B, Lv, _ = vid_feat.shape
 
-        vid_feat_, txt_feat_ = self.cross_attn(vid_feat, vid_mask, txt_feat, txt_mask)
+        vid_feat_, txt_feat_ = self.cross_attn(vid_feat, vid_mask, txt_feat,
+                                               txt_mask)
         vid_feat = vid_feat + vid_feat_
         txt_feat = txt_feat + txt_feat_
 
@@ -148,6 +147,7 @@ class VideoTextEncoderLayer(nn.Module):
 
 
 class VideoTextEncoder(nn.Module):
+
     def __init__(self, layer, num_layer) -> None:
         super().__init__()
         self.layers = clones(layer, num_layer)
@@ -189,8 +189,7 @@ class VisualLinguisticBert(nn.Module):
         self.txt_ln = nn.LayerNorm(d_model, eps=1e-12)
 
         layer = VideoTextEncoderLayer(
-            d_model=d_model, num_head=num_head, ff_dim=ff_dim, dropout=dropout
-        )
+            d_model=d_model, num_head=num_head, ff_dim=ff_dim, dropout=dropout)
         self.encoder = VideoTextEncoder(layer, num_layer)
 
     def _get_embedding(self, vid_feat, txt_feat):
@@ -200,13 +199,13 @@ class VisualLinguisticBert(nn.Module):
         vid_feat = self.vid_proj(vid_feat)
         txt_feat = self.txt_proj(txt_feat)
 
-        vid_feat = self.vid_ln(
-            vid_feat + self.vid_pe.weight[None, : vid_feat.shape[1]] + self.type_embed_vid
-        )
+        vid_feat = self.vid_ln(vid_feat +
+                               self.vid_pe.weight[None, :vid_feat.shape[1]] +
+                               self.type_embed_vid)
 
-        txt_feat = self.txt_ln(
-            txt_feat + self.txt_pe.weight[None, : txt_feat.shape[1]] + self.type_embed_txt
-        )
+        txt_feat = self.txt_ln(txt_feat +
+                               self.txt_pe.weight[None, :txt_feat.shape[1]] +
+                               self.type_embed_txt)
 
         return vid_feat, txt_feat
 
@@ -215,7 +214,8 @@ class VisualLinguisticBert(nn.Module):
         B, Lt, _ = txt_feat.shape
 
         vid_feat, txt_feat = self._get_embedding(vid_feat, txt_feat)
-        vid_feat, txt_feat = self.encoder(vid_feat, vid_mask, txt_feat, txt_mask)
+        vid_feat, txt_feat = self.encoder(vid_feat, vid_mask, txt_feat,
+                                          txt_mask)
 
         return vid_feat, txt_feat
 
@@ -238,8 +238,8 @@ if __name__ == "__main__":
     model = model.cuda()
     for i in range(num_layer):
         model.encoder.layers[i].forward = capture_output(
-            partial(explore_content, name=f"EncoderLayer{i}", print_str=True)
-        )(model.encoder.layers[i].forward)
+            partial(explore_content, name=f"EncoderLayer{i}", print_str=True))(
+                model.encoder.layers[i].forward)
     B = 16
     Lv = 256
     vid_feat, txt_feat = model(
