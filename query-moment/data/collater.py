@@ -1,17 +1,11 @@
-from kn_util.data import (
-    merge_list_to_tensor,
-    fix_tensor_to_float32,
-    collect_features_from_sample_list,
-)
-from .processor import apply_processors
-from .processor import test_pipeline_signal as _signal
+from data.processor import *
 import copy
 from typing import Dict, List, Any
 import numpy as np
 from kn_util.general import registry
 from kn_util.debug import SignalContext
 from collections import OrderedDict
-
+from kn_util.data.collate import collect_features_from_sample_list, fix_tensor_to_float32, merge_list_to_tensor
 
 @registry.register_collater("simple")
 class SimpleCollater:

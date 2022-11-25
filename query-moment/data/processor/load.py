@@ -65,44 +65,44 @@ class ImageLoader:
         return result
 
 
-class DecodeVideoLoader:
+# class DecodeVideoLoader:
 
-    def __init__(
-        self,
-        max_len=None,
-        stride=None,
-        path_format="{}.avi",
-        from_key="video_id",
-        cache_dir=None,
-    ) -> None:
-        assert (max_len is not None) ^ (stride is not None)
-        self.stride = stride
-        self.max_len = max_len
+#     def __init__(
+#         self,
+#         max_len=None,
+#         stride=None,
+#         path_format="{}.avi",
+#         from_key="video_id",
+#         cache_dir=None,
+#     ) -> None:
+#         assert (max_len is not None) ^ (stride is not None)
+#         self.stride = stride
+#         self.max_len = max_len
 
-        self.path_format = path_format
-        self.from_key = from_key
-        self.cache_dir = cache_dir
-        if cache_dir is not None:
-            os.makedirs(cache_dir, exist_ok=True)
+#         self.path_format = path_format
+#         self.from_key = from_key
+#         self.cache_dir = cache_dir
+#         if cache_dir is not None:
+#             os.makedirs(cache_dir, exist_ok=True)
 
-    def __call__(self, result):
-        video_id = result[self.from_key]
-        if self.cache_dir:
-            cache_file = osp.join(self.cache_dir, f"{video_id}.npy")
-            if osp.exists(cache_file):
-                arr = np.load(cache_file)
-                result[self.from_key + "_imgs"] = arr
-                return result
-        video_path = self.video_format.format(video_id)
-        vr = de.VideoReader(video_path)
-        tot_len = len(vr)
+#     def __call__(self, result):
+#         video_id = result[self.from_key]
+#         if self.cache_dir:
+#             cache_file = osp.join(self.cache_dir, f"{video_id}.npy")
+#             if osp.exists(cache_file):
+#                 arr = np.load(cache_file)
+#                 result[self.from_key + "_imgs"] = arr
+#                 return result
+#         video_path = self.video_format.format(video_id)
+#         vr = de.VideoReader(video_path)
+#         tot_len = len(vr)
 
-        sampled_indices = generate_sample_indices(
-            tot_len, self.max_len, self.stride, output_stride=True)
-        arr = vr.get_batch(sampled_indices).asnumpy()
+#         sampled_indices = generate_sample_indices(
+#             tot_len, self.max_len, self.stride, output_stride=True)
+#         arr = vr.get_batch(sampled_indices).asnumpy()
 
-        if self.cache_dir:
-            np.save(cache_file, arr)
+#         if self.cache_dir:
+#             np.save(cache_file, arr)
 
-        result[self.from_key + "_imgs"] = arr
-        return result
+#         result[self.from_key + "_imgs"] = arr
+#         return result

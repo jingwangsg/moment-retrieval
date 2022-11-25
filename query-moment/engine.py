@@ -11,6 +11,9 @@ from kn_util.general import registry, get_logger
 from pprint import pformat
 import wandb
 
+log = get_logger(__name__)
+
+
 class AverageMeter(Metric):
 
     def __init__(self):
@@ -33,21 +36,27 @@ class RankMIoUAboveN(Metric):
         self.m = m
         self.n = n
         self.add_state("hit", default=torch.tensor(0.0), dist_reduce_fx="sum")
-        self.add_state(
-            "num_sample", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("num_sample", default=torch.tensor(0.0), dist_reduce_fx="sum")
 
-    def update(self, pred_bds, gt):
+    def update(self, pred_bds, scores, gt):
         B = len(pred_bds)
         pred_bds_batch = pred_bds
         gt_batch = gt
+        scores_batch = scores
+
         for i in range(B):
             pred_bds = pred_bds_batch[i]
             gt = gt_batch[i]
+            scores = scores_batch[i]
+
+            _, sorted_index = torch.sort(scores)
+            pred_bds = pred_bds[sorted_index][:self.m]
+
             Nc, _2 = pred_bds.shape
             expand_gt = repeat(gt, "i -> nc i", nc=Nc)
             ious = calc_iou_score_gt(pred_bds, expand_gt)
-            is_hit = torch.sum((ious >= self.n).long()) >= self.m
-            self.hit += is_hit.float()
+            is_hit = torch.sum(ious >= self.n)
+            self.hit += (is_hit > 0).float()
             self.num_sample += 1
 
     def compute(self):
@@ -61,7 +70,7 @@ class MomentRetrievalModule(pl.LightningModule):
         self.save_hyperparameters()
         self.net = instantiate(cfg.model)
         self.metrics = nn.ModuleList(self.build_metrics())
-        
+
     def build_metrics(self):
         cfg = self.cfg
         metrics = dict()
@@ -72,7 +81,7 @@ class MomentRetrievalModule(pl.LightningModule):
                 metrics["val"][name] = RankMIoUAboveN(m, n)
                 metrics["test"][name] = RankMIoUAboveN(m, n)
         return metrics
-    
+
     def update_metric(self, outputs, domain):
         if domain == "train":
             metrics = self.metrics["train"]
@@ -83,14 +92,16 @@ class MomentRetrievalModule(pl.LightningModule):
             for metric in self.metrics.values():
                 if isinstance(metric, RankMIoUAboveN):
                     metric.update(outputs["pred_bds"], outputs["gt"])
-        
+
     def log_metric(self, domain):
         metrics = self.metrics[domain]
         ret_dict = dict()
         for name, metric in metrics.items():
-            ret_dict[f"{domain}/{name}"] = 
-            log.info(pformat())
+            val = metric.compute()
+            ret_dict[f"{domain}/{name}"] = val
             metric.reset()
+        log.info(f"\n==============={domain} result===============")
+        log.info("\n" + pformat(ret_dict))
 
     def forward(self, *args, **kwargs):
         return self.net(*args, **kwargs)
@@ -113,8 +124,7 @@ class MomentRetrievalModule(pl.LightningModule):
 
     def training_epoch_end(self, outputs):
         epoch_loss = self.train_epoch_loss.compute()
-        self.log("train/epoch_loss", epoch_loss)
-        # log.info(f"train/epoch_loss: \t{epoch_loss}")
+        self.log_metric(outputs)
         self.train_epoch_loss.reset()
 
     def validation_step(self, batch, batch_idx):
@@ -123,15 +133,30 @@ class MomentRetrievalModule(pl.LightningModule):
             bag.update(batch)
             output = self.net(**bag)
             bag.update(output)
-            inference_output = self.net.inference(**bag)
+            infer_outputs = self.net.inference(**bag)
 
-        return inference_output
+        self.update_metric(infer_outputs, "val")
 
-    def validation_step_end(self, *args, **kwargs):
-        pass
+        return infer_outputs
+
+    def validation_epoch_end(self, outputs):
+        self.log_metric("val")
 
     def test_step(self, batch, batch_idx):
-        return self.validation_step(self, batch, batch_idx)
+        with torch.no_grad():
+            bag = dict()
+            bag.update(batch)
+            output = self.net(**bag)
+            bag.update(output)
+            infer_outputs = self.net.inference(**bag)
 
-def train_one_epoch(model, dataloader, optimizer):
-    pass
+        self.update_metric(infer_outputs, "test")
+
+        return infer_outputs
+
+    def test_epoch_end(self, outputs) -> None:
+        self.log_metric("test")
+
+
+# def train_one_epoch(model, dataloader, optimizer):
+#     pass

@@ -4,12 +4,13 @@ from ..common.runtime import paths, flags
 import os.path as osp
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import StepLR
-from ..common.pipelines.default_pipeline import pipeline
+from ..common.pipelines.collections import pipeline_dict
 
 data = dict(
     dataset="tacos",
     dataset_dir=osp.join("${paths.data_dir}", "${data.dataset}"),
-    **pipeline)
+    pipeline_verbose=False,
+    **pipeline_dict["clip"])
 
 train = dict(
     prefetch_factor=6,
@@ -23,5 +24,4 @@ train = dict(
     # lr_scheduler=(StepLR)()
 )
 
-from model.arch import ms_temporal_detr
-from model.backbone import segformerx
+from model.ms_temporal_detr import 

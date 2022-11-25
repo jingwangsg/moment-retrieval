@@ -47,10 +47,11 @@ def apply_processors(batch, processors, tqdm_args=None):
     return batch
 
 
-def build_processors(processors_cfg):
+def build_processors(processors_cfg, verbose=False):
     processors = []
     for processor_cfg in processors_cfg:
         processors += [registry.build_from_cfg(processor_cfg, "processor")]
-    log.info("\n===============processors built==============\n" + pformat(processors))
+    if verbose:
+        log.info("\n===============processors built==============\n" + pformat(processors))
 
     return processors

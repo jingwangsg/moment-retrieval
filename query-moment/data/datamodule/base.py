@@ -30,7 +30,8 @@ class TSGVDataModule:
 
     def prepare_data(self) -> None:
         self.load_data()
-        self.sanity_check()
+        if self.cfg.data.pipeline_verbose:
+            self.sanity_check()
         self.preprocess()
 
     def load_data(self):
@@ -41,20 +42,13 @@ class TSGVDataModule:
         cfg = self.cfg
         x = copy.copy(self.datasets["train"][:4])
         with SignalContext(_signal, True):
-            pre_processor = build_processors(self.cfg.data.pre_processors)
+            pre_processor = build_processors(self.cfg.data.pre_processors, verbose=True)
             x = apply_processors(x, pre_processor)
-            processors = build_processors(cfg.data.processors)
-            collater = registry.build_collater(
-                cfg.data.collater,
-                cfg=cfg,
-                processors=processors,
-                is_train=True,
-            )
+            collater = self.build_collater("train")
             x = collater(x)
             log.info("\n" + explore_content(x, "collater output"))
 
         del pre_processor
-        del processors
         del collater
         del x
 
@@ -73,9 +67,9 @@ class TSGVDataModule:
                     desc=f"preprocess {domain}", total=len(dataset)),
             )
 
-    def build_collater(self, domain):
+    def build_collater(self, domain, verbose=False):
         cfg = self.cfg
-        processors = build_processors(cfg.data.processors)
+        processors = build_processors(cfg.data.processors, verbose=verbose)
         self.dataloaders = dict()
         collater = registry.build_collater(
             cfg.data.collater,

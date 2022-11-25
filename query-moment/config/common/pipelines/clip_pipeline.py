@@ -14,19 +14,18 @@ dataset_dir = "${data.dataset_dir}"
 cache_dir = "${paths.cache_dir}"
 vid_feat_type = "${data.video_feat_type}"
 
+vid_clip_file = osp.join(dataset_dir, pretrained + ".vid.hdf5")
+txt_clip_file = osp.join(dataset_dir, pretrained + ".txt.hdf5")
 
-delete_unfound_video = L(BatchLambda)(_lambda=L(FilterFunctionBuilder)(dataset="${data.dataset}"))
+load_video_clip = L(HDF5Loader)(hdf5_file=vid_clip_file, from_key="video_id", key_template="{}/pooler_output")
+load_text_clip = L(HDF5Loader)(hdf5_file=txt_clip_file, from_key="text_id")
+delete_unfound_video = L(HDF5Checker)(hdf5_file=vid_clip_file)
 
-rename = L(Rename)(
-    from_keys=[
-        "video_frame_paths.last_hidden_state", "text.last_hidden_state"
-    ],
-    to_keys=["video_feat", "text_feat"])
-"""pipeline collections"""
+rename = L(Rename)(from_keys=["video_id.hdf5", "text_id.hdf5"], to_keys=["video_feat", "text_feat"])
+collect = L(Collect)(from_keys=["text_feat", "text_mask", "vid_feat", "vid_mask", "gt"])
 
-pipeline = dict(
-    pretrained="openai/clip-vit-large-patch14-336",
-    video_max_len=512,
-    collater="simple",
-    pre_processors=[delete_unfound_video],
-    default_processors)
+pipeline = dict(pretrained="clip-vit-large-patch14-336",
+                video_max_len=512,
+                collater="simple",
+                pre_processors=[delete_unfound_video],
+                processors=[load_video_clip, load_text_clip, rename, *default_processors, collect])

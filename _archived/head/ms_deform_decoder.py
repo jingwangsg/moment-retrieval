@@ -5,10 +5,10 @@ from mmcv.cnn.bricks.transformer import MultiScaleDeformableAttention
 from einops import reduce, rearrange, repeat
 from kn_util.nn import clones
 
+
 class MultiScaleDeformableDecoderLayer(nn.Module):
-    def __init__(self,
-                 d_model, num_head, num_level, num_points, dropout
-        ) -> None:
+
+    def __init__(self, d_model, num_head, num_level, num_points, dropout) -> None:
         super().__init__()
         self.ms_defm_attn = MultiScaleDeformableAttention(
             embed_dims=d_model,
@@ -18,26 +18,26 @@ class MultiScaleDeformableDecoderLayer(nn.Module):
             dropout=dropout,
             batch_first=True,
         )
-    
+
     def forward(self, h_flatten, mask_flatten, spatial_shape, reference_points):
         pass
 
+
 class MultiScaleDeformableDecoder(nn.Module):
-    def __init__(
-        self,
-        d_model=512,
-        num_head=16,
-        num_query=100,
-        num_points=4,
-        num_level=4,
-        dropout=0.1,
-        num_layer=6
-    ) -> None:
+
+    def __init__(self,
+                 d_model=512,
+                 num_head=16,
+                 num_query=100,
+                 num_points=4,
+                 num_level=4,
+                 dropout=0.1,
+                 num_layer=6) -> None:
         super().__init__()
         layer = MultiScaleDeformableDecoderLayer(d_model, num_head, num_level, num_points, dropout)
         self.layers = clones(layer, num_layer)
-    
-    def get_initial_reference_points(self, ):
+
+    def get_initial_reference_points(self,):
         pass
 
     def forward(self, hs, masks):

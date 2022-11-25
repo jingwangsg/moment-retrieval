@@ -7,5 +7,6 @@ paths = dict(
 
 flags = dict(
     debug=False,
-    ddp=False
+    ddp=False,
+    amp=False
 )
