@@ -24,4 +24,4 @@ train = dict(
     # lr_scheduler=(StepLR)()
 )
 
-from model.ms_temporal_detr import 
+# from model.ms_temporal_detr import 

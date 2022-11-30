@@ -310,58 +310,58 @@ class SegFormerXFPN(nn.Module):
             fpn_states[idx] += F.interpolate(fpn_states[idx + 1], fpn_states[idx].shape[-1])
 
         for idx, fpn_state in enumerate(fpn_states):
-            fpn_state = self.out_convs[idx](fpn_state).transpose(1, 2)
+            fpn_states[idx] = self.out_convs[idx](fpn_state).transpose(1, 2)
 
         return fpn_states, intermediate_masks
 
 
-def build_segformerx(cfg):
-    segformerx = SegFormerX(d_model_in=cfg.hidden_size,
-                            d_model_lvls=cfg.d_model_lvls,
-                            num_head_lvls=cfg.num_head_lvls,
-                            ff_dim_lvls=cfg.ff_dim_lvls,
-                            sr_ratio_lvls=cfg.sr_ratio_lvls,
-                            input_vid_dim=cfg.input_vid_dim,
-                            input_txt_dim=cfg.input_txt_dim,
-                            max_vid_len=cfg.max_vid_len,
-                            max_txt_len=cfg.max_txt_len,
-                            dropout=cfg.dropout)
+# def build_segformerx(cfg):
+#     segformerx = SegFormerX(d_model_in=cfg.hidden_size,
+#                             d_model_lvls=cfg.d_model_lvls,
+#                             num_head_lvls=cfg.num_head_lvls,
+#                             ff_dim_lvls=cfg.ff_dim_lvls,
+#                             sr_ratio_lvls=cfg.sr_ratio_lvls,
+#                             input_vid_dim=cfg.input_vid_dim,
+#                             input_txt_dim=cfg.input_txt_dim,
+#                             max_vid_len=cfg.max_vid_len,
+#                             max_txt_len=cfg.max_txt_len,
+#                             dropout=cfg.dropout)
 
-    if cfg.use_fpn:
-        return SegFormerXFPN(segformerx, intermediate_hidden_size=cfg.d_model_lvls, fpn_hidden_size=cfg.hidden_size)
-    else:
-        return segformerx
+#     if cfg.use_fpn:
+#         return SegFormerXFPN(segformerx, intermediate_hidden_size=cfg.d_model_lvls, fpn_hidden_size=cfg.hidden_size)
+#     else:
+#         return segformerx
 
 
-if __name__ == "__main__":
-    num_layer = 3
-    model = SegFormerX(d_model_in=1024,
-                       d_model_lvls=[512, 1024, 2048, 2048],
-                       ff_dim_lvls=[1024, 2048, 2048, 2048],
-                       sr_ratio_lvls=[8, 4, 2, 1],
-                       input_vid_dim=1024,
-                       input_txt_dim=768,
-                       max_vid_len=2048,
-                       max_txt_len=31,
-                       dropout=0.1,
-                       pe="conv")
-    model_fpn = SegFormerXFPN(model, intermediate_hidden_size=[512, 1024, 2048, 2048], fpn_hidden_size=256)
-    from kn_util.debug import capture_forward_and_print, explore_content
-    from functools import partial
-    model_fpn = model_fpn.cuda()
-    B = 16
-    Lv = 2048
-    vid_mask = torch.ones((B, Lv), dtype=torch.bool, device="cuda")
-    vid_mask[:, 900:] = False
-    intermediate_states, intermediate_masks = model_fpn(
-        vid_feat=torch.randn((B, Lv, 1024), device="cuda"),
-        vid_mask=vid_mask,
-        txt_feat=torch.randn((B, 16, 768), device="cuda"),
-        txt_mask=torch.ones((B, 16), dtype=torch.bool, device="cuda"),
-    )
-    print(explore_content(intermediate_states, name="intermediate_states"))
-    print(explore_content(intermediate_masks, name="intermediate_masks"))
-    print(torch.cuda.max_memory_allocated("cuda") / (1024**3))
-    import ipdb
+# if __name__ == "__main__":
+#     num_layer = 3
+#     model = SegFormerX(d_model_in=1024,
+#                        d_model_lvls=[512, 1024, 2048, 2048],
+#                        ff_dim_lvls=[1024, 2048, 2048, 2048],
+#                        sr_ratio_lvls=[8, 4, 2, 1],
+#                        input_vid_dim=1024,
+#                        input_txt_dim=768,
+#                        max_vid_len=2048,
+#                        max_txt_len=31,
+#                        dropout=0.1,
+#                        pe="conv")
+#     model_fpn = SegFormerXFPN(model, intermediate_hidden_size=[512, 1024, 2048, 2048], fpn_hidden_size=256)
+#     from kn_util.debug import capture_forward_and_print, explore_content
+#     from functools import partial
+#     model_fpn = model_fpn.cuda()
+#     B = 16
+#     Lv = 2048
+#     vid_mask = torch.ones((B, Lv), dtype=torch.bool, device="cuda")
+#     vid_mask[:, 900:] = False
+#     intermediate_states, intermediate_masks = model_fpn(
+#         vid_feat=torch.randn((B, Lv, 1024), device="cuda"),
+#         vid_mask=vid_mask,
+#         txt_feat=torch.randn((B, 16, 768), device="cuda"),
+#         txt_mask=torch.ones((B, 16), dtype=torch.bool, device="cuda"),
+#     )
+#     print(explore_content(intermediate_states, name="intermediate_states"))
+#     print(explore_content(intermediate_masks, name="intermediate_masks"))
+#     print(torch.cuda.max_memory_allocated("cuda") / (1024**3))
+#     import ipdb
 
-    ipdb.set_trace()  # FIXME
+#     ipdb.set_trace()  # FIXME
