@@ -1,0 +1,881 @@
+diff --git a/query-moment/config/common/pipelines/__init__.py b/query-moment/config/common/pipelines/__init__.py
+index e69de29..fc06cb5 100644
+--- a/query-moment/config/common/pipelines/__init__.py
++++ b/query-moment/config/common/pipelines/__init__.py
+@@ -0,0 +1,8 @@
++from .clip_pipeline import pipeline as clip
++from .default_pipeline import pipeline as default
++
++pipeline_dict = dict(clip=clip,
++                     default=default)
++
++def build_pipeline(name):
++    return pipeline_dict[name]
+\ No newline at end of file
+diff --git a/query-moment/config/common/pipelines/clip_pipeline.py b/query-moment/config/common/pipelines/clip_pipeline.py
+index 3254b44..5764a10 100644
+--- a/query-moment/config/common/pipelines/clip_pipeline.py
++++ b/query-moment/config/common/pipelines/clip_pipeline.py
+@@ -12,7 +12,6 @@ pretrained = "${data.pretrained}"
+ dataset = "${data.dataset}"
+ dataset_dir = "${data.dataset_dir}"
+ cache_dir = "${paths.cache_dir}"
+-vid_feat_type = "${data.video_feat_type}"
+ 
+ vid_clip_file = osp.join(dataset_dir, pretrained + ".vid.hdf5")
+ txt_clip_file = osp.join(dataset_dir, pretrained + ".txt.hdf5")
+@@ -22,7 +21,7 @@ load_text_clip = L(HDF5Loader)(hdf5_file=txt_clip_file, from_key="text_id")
+ delete_unfound_video = L(HDF5Checker)(hdf5_file=vid_clip_file)
+ 
+ rename = L(Rename)(from_keys=["video_id.hdf5", "text_id.hdf5"], to_keys=["video_feat", "text_feat"])
+-collect = L(Collect)(from_keys=["text_feat", "text_mask", "vid_feat", "vid_mask", "gt"])
++collect = L(Collect)(from_keys=["txt_feat", "txt_mask", "vid_feat", "vid_mask", "gt"])
+ 
+ pipeline = dict(pretrained="clip-vit-large-patch14-336",
+                 video_max_len=512,
+diff --git a/query-moment/config/common/pipelines/collections.py b/query-moment/config/common/pipelines/collections.py
+deleted file mode 100644
+index f7a29bc..0000000
+--- a/query-moment/config/common/pipelines/collections.py
++++ /dev/null
+@@ -1,5 +0,0 @@
+-from .clip_pipeline import pipeline as clip
+-from .default_pipeline import pipeline as default
+-
+-pipeline_dict = dict(clip=clip,
+-                     default=default)
+\ No newline at end of file
+diff --git a/query-moment/config/common/pipelines/default_bundle.py b/query-moment/config/common/pipelines/default_bundle.py
+index 4ee8842..4465fc3 100644
+--- a/query-moment/config/common/pipelines/default_bundle.py
++++ b/query-moment/config/common/pipelines/default_bundle.py
+@@ -13,7 +13,8 @@ rename = L(Rename)(
+         "video_feat.sample.pad",
+         "video_feat.sample.mask",
+     ],
+-    to_keys=["text_feat", "text_mask", "vid_feat", "vid_mask"])
++    to_keys=["txt_feat", "txt_mask", "vid_feat", "vid_mask"])
++
+ 
+ # text_feat, vid_feat -> text_feat, text_mask, vid_feat, vid_mask
+ processors = [sample_video, pad_video, pad_text, rename]
+\ No newline at end of file
+diff --git a/query-moment/config/common/pipelines/default_pipeline.py b/query-moment/config/common/pipelines/default_pipeline.py
+index 4511acd..e0e75f8 100644
+--- a/query-moment/config/common/pipelines/default_pipeline.py
++++ b/query-moment/config/common/pipelines/default_pipeline.py
+@@ -7,28 +7,23 @@ cache_dir = "${paths.cache_dir}"
+ dataset = "${data.dataset}"
+ pretrained = "${data.pretrained}"
+ 
+-infer_glove_txt = L(GloveTokenizer)(
+-    cache_dir=osp.join(cache_dir, ".glove"),
+-    to_embeddings=True,
+-    from_key="text")
++infer_glove_txt = L(GloveTokenizer)(cache_dir=osp.join(cache_dir, ".glove"), to_embeddings=True, from_key="text")
+ 
+ hdf5_file = "${data.dataset_dir}/${data.video_feat_type}.hdf5"
+ hdf5_key_template = "{video_id}"
+-delete_feature_nonexist = L(HDF5Checker)(
+-    hdf5_file=hdf5_file, key_template=hdf5_key_template)
++delete_feature_nonexist = L(HDF5Checker)(hdf5_file=hdf5_file, key_template=hdf5_key_template)
+ load_video_hdf5 = L(HDF5Loader)(hdf5_file=hdf5_file, from_key="video_id")
+ 
+-rename = L(Rename)(
+-    from_keys=["text.embs", "video_id.hdf5"],
+-    to_keys=["text_feat", "video_feat"])
++rename = L(Rename)(from_keys=["text.embs", "video_id.hdf5"], to_keys=["text_feat", "video_feat"])
++collect = L(Collect)(from_keys=["txt_feat", "txt_mask", "vid_feat", "vid_mask", "gt"])
+ 
+-collect = L(Collect)(
+-    from_keys = ["text_feat", "text_mask", "vid_feat", "vid_mask", "gt"]
+-)
++pad_video = default_processors[1]
++pad_video["to_multiple"] = "${data.to_multiple_pad_video}"
++default_processors[1] = pad_video
+ 
+-pipeline = dict(
+-    video_feat_type="i3d",
+-    video_max_len=2048,
+-    collater="simple",
+-    processors=[load_video_hdf5, rename, *default_processors, collect],
+-    pre_processors=[infer_glove_txt, delete_feature_nonexist])
++pipeline = dict(video_feat_type="i3d",
++                video_max_len=512,
++                collater="simple",
++                to_multiple_pad_videe=16,
++                processors=[load_video_hdf5, rename, *default_processors, collect],
++                pre_processors=[infer_glove_txt, delete_feature_nonexist])
+diff --git a/query-moment/config/common/runtime.py b/query-moment/config/common/runtime.py
+index ac9edca..5695691 100644
+--- a/query-moment/config/common/runtime.py
++++ b/query-moment/config/common/runtime.py
+@@ -2,11 +2,12 @@ paths = dict(
+     root_dir="/export/home2/kningtg/WORKSPACE/moment-retrieval/query-moment",
+     data_dir="/export/home2/kningtg/WORKSPACE/moment-retrieval/data-bin/raw",
+     cache_dir="/export/home2/kningtg/WORKSPACE/moment-retrieval/data-bin/cache",
+-    work_dir="${paths.root_dir}/work_dir",
++    work_dir="${paths.root_dir}/work_dir/${flags.exp}",
+ )
+ 
+ flags = dict(
+     debug=False,
+     ddp=False,
+-    amp=False
++    amp=False,
++    seed=3147
+ )
+\ No newline at end of file
+diff --git a/query-moment/config/ms_temporal_detr/ms_temporal_detr.py b/query-moment/config/ms_temporal_detr/ms_temporal_detr.py
+deleted file mode 100644
+index 28ddd27..0000000
+--- a/query-moment/config/ms_temporal_detr/ms_temporal_detr.py
++++ /dev/null
+@@ -1,27 +0,0 @@
+-from omegaconf import OmegaConf
+-from detectron2.config import LazyCall as L
+-from ..common.runtime import paths, flags
+-import os.path as osp
+-from torch.optim import AdamW
+-from torch.optim.lr_scheduler import StepLR
+-from ..common.pipelines.collections import pipeline_dict
+-
+-data = dict(
+-    dataset="tacos",
+-    dataset_dir=osp.join("${paths.data_dir}", "${data.dataset}"),
+-    pipeline_verbose=False,
+-    **pipeline_dict["clip"])
+-
+-train = dict(
+-    prefetch_factor=6,
+-    num_workers=8,
+-    # prefetch_factor=2,
+-    # num_workers=0,
+-    max_epochs=12,
+-    eval_epoch_interval=1,
+-    batch_size=16,
+-    optimizer=L(AdamW)(params=None, lr=3e-4),
+-    # lr_scheduler=(StepLR)()
+-)
+-
+-# from model.ms_temporal_detr import 
+\ No newline at end of file
+diff --git a/query-moment/data/datamodule/base.py b/query-moment/data/datamodule/base.py
+index dfd8f5c..6f392a0 100644
+--- a/query-moment/data/datamodule/base.py
++++ b/query-moment/data/datamodule/base.py
+@@ -21,15 +21,15 @@ log = get_logger(__name__)
+ _signal = "_TEST_PIPELINE_SIGNAL"
+ 
+ 
+-class TSGVDataModule:
++class TSGVDataModule(pl.LightningDataModule):
+ 
+     def __init__(self, cfg) -> None:
+         super().__init__()
+         self.cfg = cfg
+-        self.prepare_data()
++        self.load_data()
++        # self.prepare_data()
+ 
+     def prepare_data(self) -> None:
+-        self.load_data()
+         if self.cfg.data.pipeline_verbose:
+             self.sanity_check()
+         self.preprocess()
+diff --git a/query-moment/engine.py b/query-moment/engine.py
+index 820afe2..c1f42de 100644
+--- a/query-moment/engine.py
++++ b/query-moment/engine.py
+@@ -8,13 +8,16 @@ from torchmetrics import Metric
+ from misc import calc_iou_score_gt
+ from einops import repeat
+ from kn_util.general import registry, get_logger
+-from pprint import pformat
++import pandas as pd
+ import wandb
++import copy
+ 
+ log = get_logger(__name__)
+ 
+ 
+ class AverageMeter(Metric):
++    higher_is_better = False
++    full_state_update = True
+ 
+     def __init__(self):
+         super().__init__()
+@@ -22,7 +25,7 @@ class AverageMeter(Metric):
+         self.add_state("n", default=torch.tensor(0.0), dist_reduce_fx="sum")
+ 
+     def update(self, val):
+-        self.sum += val.detach()
++        self.sum += val
+         self.n += 1
+ 
+     def compute(self):
+@@ -30,6 +33,8 @@ class AverageMeter(Metric):
+ 
+ 
+ class RankMIoUAboveN(Metric):
++    higher_is_better = True
++    full_state_update = True
+ 
+     def __init__(self, m, n) -> None:
+         super().__init__()
+@@ -68,73 +73,86 @@ class MomentRetrievalModule(pl.LightningModule):
+     def __init__(self, cfg) -> None:
+         super().__init__()
+         self.save_hyperparameters()
++        self.cfg = cfg
+         self.net = instantiate(cfg.model)
+-        self.metrics = nn.ModuleList(self.build_metrics())
++        metrics = self.build_metrics()
++        self.metrics = dict(_val=metrics["val"], _test=metrics["test"])
+ 
+     def build_metrics(self):
+         cfg = self.cfg
+         metrics = dict()
+-        metrics["train"] = {k: AverageMeter() for k in cfg.loss_keys}
++        # metrics["train"] = {k: AverageMeter() for k in cfg.train.loss_keys}
++        # build from runtime
++        metrics["val"] = dict()
++        metrics["test"] = dict()
+         for m in [1, 5]:
+             for n in [0.3, 0.5, 0.7]:
+-                name = f"Rank{m}@IoU={n:.1f}"
++                name = f"Rank{m}@IoU={n:.1f}".replace(".", "")
+                 metrics["val"][name] = RankMIoUAboveN(m, n)
+                 metrics["test"][name] = RankMIoUAboveN(m, n)
+         return metrics
+ 
+     def update_metric(self, outputs, domain):
+         if domain == "train":
+-            metrics = self.metrics["train"]
++            if "_train" not in self.metrics:
++                self.metrics["_train"] = nn.ModuleDict({k: AverageMeter() for k in outputs})
++            metrics = self.metrics["_train"]
+             for k in outputs:
+-                metrics[k].update(outputs[k])
++                metrics[k].update(outputs[k].item())
+         else:
+-            metrics = self.metrics[domain]
+-            for metric in self.metrics.values():
++            metrics = self.metrics["_" + domain]
++            for metric in metrics.values():
+                 if isinstance(metric, RankMIoUAboveN):
+-                    metric.update(outputs["pred_bds"], outputs["gt"])
++                    metric.update(outputs["boxxes"].cpu(), outputs["score"].cpu(), outputs["gt"].cpu())
+ 
+     def log_metric(self, domain):
+-        metrics = self.metrics[domain]
++        metrics = self.metrics["_" + domain]
+         ret_dict = dict()
++
+         for name, metric in metrics.items():
+-            val = metric.compute()
++            val = metric.compute().item()
+             ret_dict[f"{domain}/{name}"] = val
++            self.log(f"{domain}/{name}", val)
++
+             metric.reset()
+         log.info(f"\n==============={domain} result===============")
+-        log.info("\n" + pformat(ret_dict))
++        log.info("\n" + pd.Series(ret_dict).to_string())
+ 
+     def forward(self, *args, **kwargs):
+         return self.net(*args, **kwargs)
+ 
+     def on_train_epoch_start(self):
+-        seed = self.cfg.G.seed
++        seed = self.cfg.flags.seed
+         seed_everything(seed + self.current_epoch)
+ 
+     def training_step(self, batch, batch_idx):
+-        bag = dict()
+-        bag.update(batch)
+-        output = self.net(**bag)
+-        bag.update(output)
+-        losses = self.net.compute_loss(**bag)
++        losses = self.net(**batch, mode="train")
++        """<DEBUG> output_grad"""
++        from kn_util.general import registry
++        from kn_util.debug import explore_content as EC
++        if registry.get_object("output_grad", False):
++            losses['loss'].backward()
++            for name, param in self.net.named_parameters():
++                if param.grad is not None:
++                    print(name, param.grad.norm())
++                else:
++                    print(name)
++            import ipdb
++            ipdb.set_trace()  #FIXME
++        """<DEBUG>"""
+ 
+         return losses
+ 
+     def training_step_end(self, losses):
+-        self.train_epoch_loss.update(losses["loss"])
++        self.update_metric(losses, "train")
+ 
+     def training_epoch_end(self, outputs):
+-        epoch_loss = self.train_epoch_loss.compute()
+-        self.log_metric(outputs)
+-        self.train_epoch_loss.reset()
++        self.log_metric("train")
+ 
+     def validation_step(self, batch, batch_idx):
+         with torch.no_grad():
+-            bag = dict()
+-            bag.update(batch)
+-            output = self.net(**bag)
+-            bag.update(output)
+-            infer_outputs = self.net.inference(**bag)
+-
++            infer_outputs = self.net(**batch, mode="inference")
++        infer_outputs.update(batch)
+         self.update_metric(infer_outputs, "val")
+ 
+         return infer_outputs
+@@ -144,12 +162,8 @@ class MomentRetrievalModule(pl.LightningModule):
+ 
+     def test_step(self, batch, batch_idx):
+         with torch.no_grad():
+-            bag = dict()
+-            bag.update(batch)
+-            output = self.net(**bag)
+-            bag.update(output)
+-            infer_outputs = self.net.inference(**bag)
+-
++            infer_outputs = self.net(**batch, mode="inference")
++        infer_outputs.update(batch)
+         self.update_metric(infer_outputs, "test")
+ 
+         return infer_outputs
+@@ -157,6 +171,12 @@ class MomentRetrievalModule(pl.LightningModule):
+     def test_epoch_end(self, outputs) -> None:
+         self.log_metric("test")
+ 
++    def configure_optimizers(self):
++        optimizer_cfg = copy.deepcopy(self.cfg.train.optimizer)
++        optimizer_cfg.params = self.net.parameters()
++        optimizer = instantiate(optimizer_cfg)
++        return optimizer
++
+ 
+ # def train_one_epoch(model, dataloader, optimizer):
+ #     pass
+\ No newline at end of file
+diff --git a/query-moment/main.py b/query-moment/main.py
+index 1c63477..dbefb0a 100644
+--- a/query-moment/main.py
++++ b/query-moment/main.py
+@@ -2,6 +2,7 @@ import torch
+ import argparse
+ import pytorch_lightning as pl
+ from pytorch_lightning.callbacks import ModelCheckpoint, RichModelSummary, RichProgressBar
++from pytorch_lightning.loggers.wandb import WandbLogger
+ from engine import MomentRetrievalModule
+ from kn_util.general import registry, get_logger
+ from kn_util.config import LazyConfig
+@@ -12,42 +13,67 @@ log = get_logger(__name__)
+ def parse_args():
+     args = argparse.ArgumentParser()
+     args.add_argument("cfg", type=str)
+-    args.add_argument("--cfg-override", nargs="+")
++    args.add_argument("--cfg-override", "-co", nargs="+")
+     args.add_argument("--resume", action="store_true", default=False)
+     args.add_argument("--accelerator", default="gpu", type=str)
+-    args.add_argument("--debug", action="store_true", default=False)
++    args.add_argument("--no-multiproc", action="store_true", default=False)
++    args.add_argument("--no-callback", action="store_true", default=False)
+ 
+     return args.parse_args()
+ 
+ 
+ def main(args):
+     cfg = LazyConfig.load(args.cfg)
+-    LazyConfig.apply_overrides(cfg, args.cfg_option)
++    LazyConfig.apply_overrides(cfg, args.cfg_override)
+     if args.resume:
+         pl.Trainer.resume_from_checkpoint(cfg.paths.work_dir)
+-    callbacks = [
+-        ModelCheckpoint(
+-            cfg.paths.work_dir,
+-            monitor=cfg.train.val_monitor,
+-            verbose=True,
+-            save_weights_only=True,
+-        ),
+-        RichModelSummary(),
+-        RichProgressBar(refresh_rate=20),
+-    ]
+-    trainer = pl.Trainer(
+-        max_epochs=cfg.train.max_epochs,
+-        callbacks=callbacks,
+-        gradient_clip_val=cfg.train.clip_grad,
+-        accelerator=args.accelerator,
+-    )
++
++    if args.no_multiproc:
++        # args.accelerator = "cpu"
++        cfg.train.prefetch_factor = 2
++        cfg.train.num_workers = 0
++
++    if args.no_callback:
++        callbacks = []
++        logger = False
++
++    else:
++        callbacks = [
++            ModelCheckpoint(
++                cfg.paths.work_dir,
++                monitor=cfg.train.val_monitor,
++                verbose=True,
++                save_weights_only=True,
++            ),
++            RichModelSummary(),
++            RichProgressBar(refresh_rate=20)
++        ]
++        logger = WandbLogger(name=cfg.flags.exp, project="query-moment")
++
++    trainer = pl.Trainer(max_epochs=cfg.train.max_epochs,
++                         callbacks=callbacks,
++                         gradient_clip_val=cfg.train.clip_grad,
++                         accelerator=args.accelerator,
++                         logger=logger)
++    from kn_util.general import registry
++    # registry.register_object("output_proposal", True)
++    # registry.register_object("output_grad", True)
++
++    # trainer = pl.Trainer(max_epochs=-1,
++    #                      callbacks=callbacks,
++    #                      gradient_clip_val=cfg.train.clip_grad,
++    #                      accelerator=args.accelerator,
++    #                      overfit_batches=1)
+ 
+     module = MomentRetrievalModule(cfg)
+     datamodule = registry.build_datamodule(cfg.data.dataset, cfg=cfg)
++    # datamodule.datasets["train"] = datamodule.datasets["train"][:1]
+ 
++    # trainer.fit(model=module,
++    #             train_dataloaders=datamodule.train_dataloader(),
++    #             val_dataloaders=datamodule.train_dataloader())
+     trainer.fit(model=module, datamodule=datamodule)
+-    trainer.validate(ckpt_path="best")
+-
++    # trainer.validate(ckpt_path="best")
+ 
+ 
+ if __name__ == "__main__":
+diff --git a/query-moment/misc.py b/query-moment/misc.py
+index 9f94763..9419517 100644
+--- a/query-moment/misc.py
++++ b/query-moment/misc.py
+@@ -1,15 +1,50 @@
+ import torch
++from torchvision.ops import batched_nms
++from einops import repeat, rearrange
+ 
++
++def inverse_sigmoid(x, eps=1e-5):
++    x = x.clamp(min=0, max=1)
++    x1 = x.clamp(min=eps)
++    x2 = (1 - x).clamp(min=eps)
++    return torch.log(x1 / x2)
++
++
++def nms(pred_bds, scores, batch_idxs, iou_threshold):
++    B, Nc, _2 = pred_bds.shape
++
++    zero_pad = torch.zeros(pred_bds.shape[:2], dtype=torch.float32, device=pred_bds.device)
++    one_pad = zero_pad + 1
++    boxxes = torch.stack([pred_bds[..., 0], zero_pad, pred_bds[..., 1], one_pad], dim=2)
++    boxxes_flatten = repeat(boxxes, "b nc i -> (b nc) i")
++    scores_flatten = repeat(scores, "b nc -> (b nc)")
++
++    nms_indices = batched_nms(boxxes_flatten, scores_flatten, batch_idxs, iou_threshold)
++    nms_pred_bds_flatten = boxxes_flatten[nms_indices, (0, 2)]
++    nms_scores_flatten = scores_flatten[nms_indices]
++    nms_idxs = batch_idxs[nms_indices]
++
++    nms_pred_bds = []
++    nms_scores = []
++    for b in range(B):
++        cur_batch_indices = nms_idxs == b
++        nms_pred_bds += [nms_pred_bds_flatten[cur_batch_indices]]
++        nms_scores += [nms_scores_flatten[cur_batch_indices]]
++    
++    return nms_pred_bds, nms_scores
++
++
++@torch.no_grad()
+ def calc_iou_score_gt(pred_bds, gt, type="iou"):
+     """make sure the range between [0, 1) to make loss function happy"""
+     min_ed = torch.minimum(pred_bds[:, 1], gt[:, 1])
+     max_ed = torch.maximum(pred_bds[:, 1], gt[:, 1])
+     min_st = torch.minimum(pred_bds[:, 0], gt[:, 0])
+     max_st = torch.maximum(pred_bds[:, 0], gt[:, 0])
+-    
++
+     I = torch.maximum(min_ed - max_st, torch.zeros_like(min_ed, dtype=torch.float, device=pred_bds.device))
+-    area_pred = pred_bds[1] - pred_bds[1]
+-    area_gt = gt[1] - gt[0]
++    area_pred = pred_bds[:, 1] - pred_bds[:, 0]
++    area_gt = gt[:, 1] - gt[:, 0]
+     U = area_pred + area_gt - I
+     Ac = max_ed - min_st
+ 
+@@ -20,4 +55,16 @@ def calc_iou_score_gt(pred_bds, gt, type="iou"):
+     elif type == "giou":
+         return 0.5 * (iou + U / Ac)
+     else:
+-        raise NotImplementedError()
+\ No newline at end of file
++        raise NotImplementedError()
++
++
++def cw2se(cw):
++    se = torch.zeros_like(cw)
++    se[..., 0] = cw[..., 0] - cw[..., 1] / 2
++    se[..., 0][se[..., 0] < 0.0] = 0.0
++    se[..., 1] = cw[..., 0] + cw[..., 1] / 2
++    se[..., 1][se[..., 1] > 1.0] = 1.0
++
++    # se[(se[..., 0] < 0.0) | (se[..., 1] > 1.0)] = 0.0
++
++    return se
+\ No newline at end of file
+diff --git a/query-moment/model/ms_temporal_detr/__init__.py b/query-moment/model/ms_temporal_detr/__init__.py
+index fc80254..0c7f8f6 100644
+--- a/query-moment/model/ms_temporal_detr/__init__.py
++++ b/query-moment/model/ms_temporal_detr/__init__.py
+@@ -1 +1,2 @@
+-pass
+\ No newline at end of file
++from .ms_temporal_detr import MultiScaleTemporalDetr, QueryBasedDecoder
++from .segformerx import SegFormerX, SegFormerXFPN
+\ No newline at end of file
+diff --git a/query-moment/model/ms_temporal_detr/loss.py b/query-moment/model/ms_temporal_detr/loss.py
+deleted file mode 100644
+index 282ca7e..0000000
+--- a/query-moment/model/ms_temporal_detr/loss.py
++++ /dev/null
+@@ -1,65 +0,0 @@
+-import torch
+-import torch.nn as nn
+-import torch.nn.functional as F
+-from typing import List
+-from einops import rearrange, repeat
+-from detectron2.config import instantiate
+-from misc import calc_iou_score_gt
+-
+-def l1_loss(pred_bds, gt, loss_weight=1.0):
+-    if isinstance(pred_bds, torch.Tensor):
+-        # B, Nc, _2 = preds.shape
+-        # B, _2 = gt.shape
+-        return torch.mean(pred_bds - gt[:, None, :])
+-    else:
+-        loss = 0.0
+-        for idx, pred_bd in enumerate(pred_bds):
+-            # NC, _2 = pred.shape
+-            loss = loss + 0.5 * (
+-                torch.abs(pred_bd[:, 0] - gt[idx, 0])
+-                + torch.abs(pred_bd[:, 1] - gt[idx, 1])
+-            )
+-        loss /= len(pred_bds)
+-    return loss * loss_weight
+-
+-
+-def dist_loss(pred_logits, gt_span, loss_weight=1.0, loss_fn=F.kl_div):
+-    if isinstance(pred_logits, torch.Tensor):
+-        B, Nc, _2, Llgt = pred_logits.shape
+-        expand_gt = repeat(gt_span, "b i llgt -> b nc i llgt", nc=Nc)
+-        pred_score = torch.softmax(pred_logits, dim=-1)
+-        return loss_fn(pred_score, expand_gt, reduction="mean") * loss_weight
+-    else:
+-        loss = 0.0
+-        for logits in pred_logits:
+-            Nc, _2, Llgt = logits.shape
+-            score = torch.softmax(logits, dim=-1)
+-            loss += loss_fn(pred_score, expand_gt, reduction="mean")
+-        return loss * loss_weight
+-
+-
+-
+-def focal_loss(iou_scores, pred_bds, gt, alpha=2, iou_type="iou", loss_weight=1.0):
+-    loss = 0.0
+-    if isinstance(pred_bds, torch.Tensor):
+-        B, Nc, _2 = pred_bds.shape
+-        pred_bds_flatten = rearrange("b nc i -> (b nc) i")
+-        gt_flatten = repeat(gt, "b i -> (b nc) i", nc=Nc)
+-        iou_gt_flatten = calc_iou_score_gt(pred_bds_flatten, gt_flatten, type=iou_type)
+-        iou_scores_flatten = rearrange("b nc -> (b nc)")
+-        loss = F.binary_cross_entropy(iou_scores_flatten, iou_gt_flatten, reduction="none")
+-        loss = loss * ((iou_scores_flatten - iou_gt_flatten) ** alpha)
+-        loss = torch.mean(loss)
+-        return loss * loss_weight
+-    else:
+-        loss = 0.0
+-        tot_cand = 0
+-        for iou_score, pred_bd, cur_gt in zip(iou_scores, pred_bds, gt):
+-            Nc, _2 = pred_bd.shape
+-            gt_flatten = repeat(cur_gt, "i -> nc i", nc=Nc)
+-            iou_gt = calc_iou_score_gt(pred_bd, gt_flatten)
+-            cur_loss = F.binary_cross_entropy(iou_score, iou_gt, reduction="none")
+-            cur_loss = cur_loss * ((iou_score - iou_gt) ** alpha)
+-            loss += cur_loss
+-            tot_cand += Nc
+-        return loss / tot_cand * loss_weight
+\ No newline at end of file
+diff --git a/query-moment/model/ms_temporal_detr/ms_pooler.py b/query-moment/model/ms_temporal_detr/ms_pooler.py
+index e3c1e6f..d202244 100644
+--- a/query-moment/model/ms_temporal_detr/ms_pooler.py
++++ b/query-moment/model/ms_temporal_detr/ms_pooler.py
+@@ -33,7 +33,7 @@ class RoIAlign1D(nn.Module):
+                               aligned=True).squeeze(-1)
+         chunk_sizes = [len(x) for x in roi_boxxes_batch]
+         align_res = list(align_res.split(chunk_sizes, dim=0))
+-        align_res = [x.transpose(1,2) for x in align_res]
++        align_res = [x.transpose(1, 2) for x in align_res]
+ 
+         return align_res
+ 
+@@ -50,7 +50,8 @@ class MultiScaleRoIAlign1D(nn.Module):
+         for feat in feat_lvls:
+             Lv = feat.shape[1]
+             cur_roi_boxxes_batch = [x * Lv for x in roi_boxxes_batch]
+-            align_res_lvls += [self.roi_align_1d(feat, cur_roi_boxxes_batch)]
++            cur_item = self.roi_align_1d(feat, cur_roi_boxxes_batch)
++            align_res_lvls += [cur_item]
+         return align_res_lvls
+ 
+ 
+diff --git a/query-moment/model/ms_temporal_detr/ms_temporal_detr.py b/query-moment/model/ms_temporal_detr/ms_temporal_detr.py
+index 1c83077..103abdc 100644
+--- a/query-moment/model/ms_temporal_detr/ms_temporal_detr.py
++++ b/query-moment/model/ms_temporal_detr/ms_temporal_detr.py
+@@ -3,38 +3,176 @@ import torch.nn as nn
+ import torch.nn.functional as F
+ from einops import einsum, repeat, rearrange, reduce
+ from kn_util.general import registry
+-from .segformerx import build_segformerx
++from .segformerx import SegFormerXFPN, SegFormerX
+ from .ms_pooler import MultiScaleRoIAlign1D
+-from model.loss import focal_loss, l1_loss
++from misc import inverse_sigmoid, cw2se, calc_iou_score_gt
++from model.loss import l1_loss, focal_loss
++from kn_util.nn.layers import MLP
++from kn_util.nn import clones
++from kn_util.general import registry
++from torchvision.ops import sigmoid_focal_loss
+ 
+ 
+-class TemporalQueryDecoder(nn.Module):
++class QueryBasedDecoder(nn.Module):
+ 
+-    def __init__(self, pooler, d_model, num_query) -> None:
++    def __init__(self,
++                 d_model,
++                 nhead,
++                 ff_dim,
++                 num_query,
++                 num_layers=4,
++                 num_scales=4,
++                 pooler_resolution=16,
++                 dim_init_ref=1,
++                 dropout=0.1,
++                 loss_cfg=None) -> None:
+         super().__init__()
+-        self.query_embeddings = nn.Embedding(num_embeddings=num_query,
+-                                            embedding_dim=d_model)
+-        self.pooler = pooler
+-    
+-    def get_initital_reference(self, )
++        self.query_embeddings = nn.Embedding(num_query, d_model)
++
++        bbox_head = MLP(d_model, d_model, 2, 3)
++        nn.init.constant_(bbox_head.layers[-1].weight.data, 0)
++        nn.init.constant_(bbox_head.layers[-1].bias.data, 0)
++        self.bbox_heads = clones(bbox_head, num_layers)
++        self.reference_head = MLP(d_model, d_model, dim_init_ref, 3)
++        score_head = MLP(d_model, d_model, 1)
++        self.score_heads = clones(score_head, num_layers)
++        self.num_layers = num_layers
++        torch.nn.init.constant_(self.bbox_heads[0].layers[-1].bias.data[1:], -2.0)
++        # make sure first offset is reasonable
++
++        layer = nn.TransformerDecoderLayer(d_model, nhead, ff_dim, dropout=dropout, batch_first=True)
++        self.layers = clones(layer, num_layers)
++
++        # build pooler
++        self.pooler = MultiScaleRoIAlign1D(output_size=pooler_resolution)
++
++        # prepare for processing pooled_feat
++        pool_ffn = MLP(d_model * pooler_resolution * num_scales,\
++                        d_model, d_model)
++        self.pool_ffns = clones(pool_ffn, num_layers)
++        self.loss_cfg = loss_cfg
++
++    def get_initital_reference(self, offset, reference_no_sigmoid):
++        if reference_no_sigmoid.shape[-1] == 1:
++            # assume temporal length of first prediction totally depends on offset predicted by boxx_head
++            offset[..., :1] += reference_no_sigmoid
++        else:
++            offset += reference_no_sigmoid
++
++        return offset
++
++    def compute_loss(self, score, proposal, gt):
++        score = score.squeeze(-1)
++        B, Nq = score.shape
++
++        ret_dict = dict()
++        loss = 0.0
++
++        expanded_proposal = rearrange(proposal, "b nq i -> (b nq) i")
++        expanded_gt = repeat(gt, "b i -> (b nq) i", nq=Nq)
++        iou_score = calc_iou_score_gt(expanded_proposal, expanded_gt, "giou")
++        assign_score = rearrange(iou_score, "(b nq) -> b nq", nq=Nq)
++        topk = self.loss_cfg["assign_topk"]
++        indices = torch.topk(assign_score, k=topk, dim=1).indices
++        # assign indices as positive, others as negative (background class)
++        score_gt = assign_score
++        positive_proposal = []
++        for idx, inds in enumerate(indices):
++            score_gt[idx, inds] = 1
++            positive_proposal += [proposal[idx, inds]]
++        positive_proposal = torch.stack(positive_proposal, dim=0)
++
++        if "l1_loss" in self.loss_cfg:
++            # only calculates l1 loss for positive
++            # no need to compute l1 loss for negative!
++            l1_loss_val = l1_loss(positive_proposal, gt)
++            loss += l1_loss_val * self.loss_cfg["l1_loss"]
++            ret_dict["l1_loss"] = l1_loss_val
++
++        if "focal_loss" in self.loss_cfg:
++            # focal_loss_val = focal_loss(score, proposal, gt)
++            focal_loss_val = sigmoid_focal_loss(score, score_gt, reduction="mean")
++            loss += focal_loss_val * self.loss_cfg["focal_loss"]
++            ret_dict["focal_loss"] = focal_loss_val
++
++        ret_dict["loss"] = loss
++        ret_dict["topk_indices"] = indices
++        return ret_dict
++
++    def forward(self, feat_lvls, mask_lvls, gt=None, mode="tensor"):
++        B = feat_lvls[0].shape[0]
++
++        query_embeddings = self.query_embeddings.weight
++        memory = feat_lvls[-1]
++        mask = mask_lvls[-1]
++        tgt = repeat(query_embeddings, "nq d -> b nq d", b=B)
++        reference = None
++        loss = 0.0
++        ret_dict = dict()
++
++        for idx, layer in enumerate(self.layers):
++            output = layer(tgt, memory, memory_key_padding_mask=~mask)  # B, Nq, D
++
++            offset = self.bbox_heads[idx](output)
++            score_logits = self.score_heads[idx](output)
++            score = score_logits.sigmoid()
++            reference_no_sigmoid = self.reference_head(query_embeddings)
++
++            if idx == 0:
++                offset = self.get_initital_reference(offset, reference_no_sigmoid)
++            else:
++                offset = inverse_sigmoid(reference) + offset
++            reference = offset.sigmoid()
++            proposal = cw2se(reference)
++            """<DEBUG> output_proposal"""
++            if registry.get_object("output_proposal", False):
++                registry.set_object(f"proposal_{idx}", proposal.detach().cpu().numpy())
++            """<DEBUG>"""
++
++            # calculate loss
++            if mode == "train":
++                cur_loss_dict = self.compute_loss(score, proposal, gt)
++                weight = self.loss_cfg["aux_loss"] if idx == self.num_layers - 1 else 1.0
++                loss += cur_loss_dict["loss"] * weight
+ 
+-    def forward(self, feat_lvls, mask_lvls):
+-        self.pooler(feat_lvls)
++                indices = cur_loss_dict.pop("topk_indices")
++                # print(f"========indices {idx}==========")
++                # print(indices)
++
++                for loss_nm, loss_val in cur_loss_dict.items():
++                    ret_dict[f"stage{idx}_{loss_nm}"] = loss_val
++
++            pooled_feat_list = self.pooler(feat_lvls, proposal)
++            # [[(Nq,Rp,D)...x B]...x N_lvls]
++            pooled_feat_list = [torch.stack(x, dim=0) for x in pooled_feat_list]
++            pooled_feat = torch.stack(pooled_feat_list, dim=0)
++            # B, N_lvls, Nq, Rp, D
++            pooled_feat = rearrange(pooled_feat, "nlvl b nq rd d -> b nq (nlvl rd d)")
++
++            pooled_feat = self.pool_ffns[idx](pooled_feat)
++            tgt = pooled_feat + query_embeddings
++
++        if registry.get_object("output_proposal", False):
++            import ipdb
++            ipdb.set_trace()  #FIXME
++
++        if mode == "train":
++            ret_dict["loss"] = loss
++            return ret_dict
++        else:
++            ret_dict["boxxes"] = proposal
++            ret_dict["score"] = score.squeeze(-1)
++            return ret_dict
+ 
+ 
+ class MultiScaleTemporalDetr(nn.Module):
+ 
+-    def __init__(self, backbone, head) -> None:
++    def __init__(self, backbone, head: QueryBasedDecoder) -> None:
+         super().__init__()
+-        d_model = cfg.model.d_model
+-        num_query = cfg.model.num_query
+-        self.backbone = build_segformerx(cfg)
+-        self.cfg = cfg
+-
+-    def forward(self, vid_feat, vid_mask, txt_feat, txt_mask, mode="tensor"):
+-        vid_feat_lvls, vid_mask_lvls = self.backbone(vid_feat, vid_mask,
+-                                                     txt_feat, txt_mask)
+-        # B, Lv, _ = vid_feat_lvls[i].shape[0]
+-        ret_dict = self.head(vid_feat_lvls, vid_mask_lvls)
++        self.backbone = backbone
++        self.head = head
+ 
++    def forward(self, vid_feat, vid_mask, txt_feat, txt_mask, gt=None, mode="tensor", **kwargs):
++        vid_feat_lvls, vid_mask_lvls = self.backbone(vid_feat, vid_mask, txt_feat, txt_mask)
++        ret_dict = self.head(vid_feat_lvls, vid_mask_lvls, gt=gt, mode=mode)
+         return ret_dict
+diff --git a/query-moment/model/ms_temporal_detr/segformerx.py b/query-moment/model/ms_temporal_detr/segformerx.py
+index e5fae58..eb8babd 100644
+--- a/query-moment/model/ms_temporal_detr/segformerx.py
++++ b/query-moment/model/ms_temporal_detr/segformerx.py
+@@ -128,10 +128,11 @@ class SegFormerXOutput(nn.Module):
+             nn.Dropout(dropout),
+         )
+         self.ln_txt = nn.LayerNorm(d_model, eps=1e-12)
++        self.do = nn.Dropout(dropout)
+ 
+     def forward(self, vid_feat, txt_feat):
+-        vid_feat = self.ln_vid(self.ffn_vid(vid_feat) + vid_feat)
+-        txt_feat = self.ln_txt(self.ffn_txt(txt_feat) + txt_feat)
++        vid_feat = self.do(self.ln_vid(self.ffn_vid(vid_feat))) + vid_feat
++        txt_feat = self.do(self.ln_txt(self.ffn_txt(txt_feat))) + txt_feat
+         return vid_feat, txt_feat
+ 
+ 
+@@ -332,7 +333,6 @@ class SegFormerXFPN(nn.Module):
+ #     else:
+ #         return segformerx
+ 
+-
+ # if __name__ == "__main__":
+ #     num_layer = 3
+ #     model = SegFormerX(d_model_in=1024,

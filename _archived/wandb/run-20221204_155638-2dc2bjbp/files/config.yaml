@@ -1,0 +1,298 @@
+wandb_version: 1
+
+_wandb:
+  desc: null
+  value:
+    cli_version: 0.13.5
+    code_path: code/query-moment/main.py
+    framework: huggingface
+    huggingface_version: 4.24.0
+    is_jupyter_run: false
+    is_kaggle_kernel: false
+    m:
+    - 1: trainer/global_step
+      6:
+      - 3
+    python_version: 3.10.6
+    start_time: 1670140598.160093
+    t:
+      1:
+      - 1
+      - 9
+      - 11
+      - 40
+      - 41
+      - 43
+      - 49
+      - 50
+      - 55
+      2:
+      - 1
+      - 9
+      - 11
+      - 40
+      - 41
+      - 43
+      - 49
+      - 50
+      - 55
+      3:
+      - 7
+      - 13
+      - 23
+      - 33
+      4: 3.10.6
+      5: 0.13.5
+      6: 4.24.0
+      8:
+      - 5
+cfg/data/collater:
+  desc: null
+  value: simple
+cfg/data/dataset:
+  desc: null
+  value: activitynet
+cfg/data/dataset_dir:
+  desc: null
+  value: /export/home2/kningtg/WORKSPACE/moment-retrieval/data-bin/raw/activitynet
+cfg/data/pipeline_verbose:
+  desc: null
+  value: false
+cfg/data/pre_processors:
+  desc: null
+  value:
+  - '{''cache_dir'': ''${paths.cache_dir}/.glove'', ''to_embeddings'': True, ''from_key'':
+    ''text'', ''_target_'': <class ''data.processor.tokenize.GloveTokenizer''>}'
+  - '{''hdf5_file'': ''${data.dataset_dir}/${data.video_feat_type}.hdf5'', ''key_template'':
+    ''{video_id}'', ''_target_'': <class ''data.processor.basic_ops.HDF5Checker''>}'
+cfg/data/processors:
+  desc: null
+  value:
+  - '{''hdf5_file'': ''${data.dataset_dir}/${data.video_feat_type}.hdf5'', ''from_key'':
+    ''video_id'', ''_target_'': <class ''data.processor.load.HDF5Loader''>}'
+  - '{''from_keys'': [''text.embs'', ''video_id.hdf5''], ''to_keys'': [''text_feat'',
+    ''video_feat''], ''_target_'': <class ''data.processor.basic_ops.Rename''>}'
+  - '{''axis'': 0, ''max_len'': ''${data.video_max_len}'', ''from_key'': ''video_feat'',
+    ''_target_'': <class ''data.processor.sample.SequenceSampler''>}'
+  - '{''from_key'': ''video_feat.sample'', ''axis'': 0, ''fill_value'': 0.0, ''_target_'':
+    <class ''data.processor.batch.SequencePad''>, ''to_multiple'': ''${data.to_multiple_pad_video}''}'
+  - '{''from_key'': ''text_feat'', ''axis'': 0, ''fill_value'': 0, ''_target_'': <class
+    ''data.processor.batch.SequencePad''>}'
+  - '{''from_keys'': [''text_feat.pad'', ''text_feat.mask'', ''video_feat.sample.pad'',
+    ''video_feat.sample.mask''], ''to_keys'': [''txt_feat'', ''txt_mask'', ''vid_feat'',
+    ''vid_mask''], ''_target_'': <class ''data.processor.basic_ops.Rename''>}'
+  - '{''from_keys'': [''txt_feat'', ''txt_mask'', ''vid_feat'', ''vid_mask'', ''gt''],
+    ''_target_'': <class ''data.processor.basic_ops.Collect''>}'
+cfg/data/to_multiple_pad_videe:
+  desc: null
+  value: 16
+cfg/data/to_multiple_pad_video:
+  desc: null
+  value: 16
+cfg/data/video_feat_type:
+  desc: null
+  value: i3d
+cfg/data/video_max_len:
+  desc: null
+  value: 1024
+cfg/default_pipeline/collater:
+  desc: null
+  value: simple
+cfg/default_pipeline/pre_processors:
+  desc: null
+  value:
+  - '{''cache_dir'': ''${paths.cache_dir}/.glove'', ''to_embeddings'': True, ''from_key'':
+    ''text'', ''_target_'': <class ''data.processor.tokenize.GloveTokenizer''>}'
+  - '{''hdf5_file'': ''${data.dataset_dir}/${data.video_feat_type}.hdf5'', ''key_template'':
+    ''{video_id}'', ''_target_'': <class ''data.processor.basic_ops.HDF5Checker''>}'
+cfg/default_pipeline/processors:
+  desc: null
+  value:
+  - '{''hdf5_file'': ''${data.dataset_dir}/${data.video_feat_type}.hdf5'', ''from_key'':
+    ''video_id'', ''_target_'': <class ''data.processor.load.HDF5Loader''>}'
+  - '{''from_keys'': [''text.embs'', ''video_id.hdf5''], ''to_keys'': [''text_feat'',
+    ''video_feat''], ''_target_'': <class ''data.processor.basic_ops.Rename''>}'
+  - '{''axis'': 0, ''max_len'': ''${data.video_max_len}'', ''from_key'': ''video_feat'',
+    ''_target_'': <class ''data.processor.sample.SequenceSampler''>}'
+  - '{''from_key'': ''video_feat.sample'', ''axis'': 0, ''fill_value'': 0.0, ''_target_'':
+    <class ''data.processor.batch.SequencePad''>, ''to_multiple'': ''${data.to_multiple_pad_video}''}'
+  - '{''from_key'': ''text_feat'', ''axis'': 0, ''fill_value'': 0, ''_target_'': <class
+    ''data.processor.batch.SequencePad''>}'
+  - '{''from_keys'': [''text_feat.pad'', ''text_feat.mask'', ''video_feat.sample.pad'',
+    ''video_feat.sample.mask''], ''to_keys'': [''txt_feat'', ''txt_mask'', ''vid_feat'',
+    ''vid_mask''], ''_target_'': <class ''data.processor.basic_ops.Rename''>}'
+  - '{''from_keys'': [''txt_feat'', ''txt_mask'', ''vid_feat'', ''vid_mask'', ''gt''],
+    ''_target_'': <class ''data.processor.basic_ops.Collect''>}'
+cfg/default_pipeline/to_multiple_pad_videe:
+  desc: null
+  value: 16
+cfg/default_pipeline/video_feat_type:
+  desc: null
+  value: i3d
+cfg/default_pipeline/video_max_len:
+  desc: null
+  value: 512
+cfg/flags/amp:
+  desc: null
+  value: false
+cfg/flags/ddp:
+  desc: null
+  value: false
+cfg/flags/debug:
+  desc: null
+  value: false
+cfg/flags/exp:
+  desc: null
+  value: ms_temporal_detr.base.i3d.anet
+cfg/flags/seed:
+  desc: null
+  value: 3147
+cfg/model/_target_:
+  desc: null
+  value: MultiScaleTemporalDetr
+cfg/model/backbone/_target_:
+  desc: null
+  value: SegFormerXFPN
+cfg/model/backbone/backbone/_target_:
+  desc: null
+  value: SegFormerX
+cfg/model/backbone/backbone/d_model_in:
+  desc: null
+  value: 1024
+cfg/model/backbone/backbone/d_model_lvls:
+  desc: null
+  value:
+  - 1024
+  - 1024
+  - 1024
+  - 1024
+cfg/model/backbone/backbone/dropout:
+  desc: null
+  value: 0.1
+cfg/model/backbone/backbone/ff_dim_lvls:
+  desc: null
+  value:
+  - 2048
+  - 2048
+  - 2048
+  - 2048
+cfg/model/backbone/backbone/input_txt_dim:
+  desc: null
+  value: 300
+cfg/model/backbone/backbone/input_vid_dim:
+  desc: null
+  value: 1024
+cfg/model/backbone/backbone/max_txt_len:
+  desc: null
+  value: 100
+cfg/model/backbone/backbone/max_vid_len:
+  desc: null
+  value: 1024
+cfg/model/backbone/backbone/num_head_lvls:
+  desc: null
+  value:
+  - 4
+  - 8
+  - 16
+  - 16
+cfg/model/backbone/backbone/sr_ratio_lvls:
+  desc: null
+  value:
+  - 4
+  - 2
+  - 2
+  - 1
+cfg/model/backbone/fpn_hidden_size:
+  desc: null
+  value: 1024
+cfg/model/backbone/intermediate_hidden_size:
+  desc: null
+  value:
+  - 1024
+  - 1024
+  - 1024
+  - 1024
+cfg/model/head/_target_:
+  desc: null
+  value: QueryBasedDecoder
+cfg/model/head/d_model:
+  desc: null
+  value: 1024
+cfg/model/head/dim_init_ref:
+  desc: null
+  value: 1
+cfg/model/head/dropout:
+  desc: null
+  value: 0.1
+cfg/model/head/ff_dim:
+  desc: null
+  value: 2048
+cfg/model/head/loss_cfg/assign_topk:
+  desc: null
+  value: 1
+cfg/model/head/loss_cfg/aux_loss:
+  desc: null
+  value: 0.01
+cfg/model/head/loss_cfg/focal_loss:
+  desc: null
+  value: 1.0
+cfg/model/head/loss_cfg/l1_loss:
+  desc: null
+  value: 2.0
+cfg/model/head/nhead:
+  desc: null
+  value: 16
+cfg/model/head/num_layers:
+  desc: null
+  value: 5
+cfg/model/head/num_query:
+  desc: null
+  value: 300
+cfg/model/head/num_scales:
+  desc: null
+  value: 4
+cfg/model/head/pooler_resolution:
+  desc: null
+  value: 16
+cfg/paths/cache_dir:
+  desc: null
+  value: /export/home2/kningtg/WORKSPACE/moment-retrieval/data-bin/cache
+cfg/paths/data_dir:
+  desc: null
+  value: /export/home2/kningtg/WORKSPACE/moment-retrieval/data-bin/raw
+cfg/paths/root_dir:
+  desc: null
+  value: /export/home2/kningtg/WORKSPACE/moment-retrieval/query-moment
+cfg/paths/work_dir:
+  desc: null
+  value: /export/home2/kningtg/WORKSPACE/moment-retrieval/query-moment/work_dir/ms_temporal_detr.base.i3d.anet
+cfg/train/batch_size:
+  desc: null
+  value: 16
+cfg/train/clip_grad:
+  desc: null
+  value: 2.0
+cfg/train/eval_epoch_interval:
+  desc: null
+  value: 1
+cfg/train/max_epochs:
+  desc: null
+  value: 50
+cfg/train/num_workers:
+  desc: null
+  value: 8
+cfg/train/optimizer/_target_:
+  desc: null
+  value: AdamW
+cfg/train/optimizer/lr:
+  desc: null
+  value: 0.0001
+cfg/train/optimizer/params:
+  desc: null
+  value: null
+cfg/train/prefetch_factor:
+  desc: null
+  value: 6
+cfg/train/val_monitor:
+  desc: null
+  value: val/Rank1@IoU=07

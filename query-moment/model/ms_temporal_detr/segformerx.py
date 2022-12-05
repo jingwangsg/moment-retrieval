@@ -128,10 +128,11 @@ class SegFormerXOutput(nn.Module):
             nn.Dropout(dropout),
         )
         self.ln_txt = nn.LayerNorm(d_model, eps=1e-12)
+        self.do = nn.Dropout(dropout)
 
     def forward(self, vid_feat, txt_feat):
-        vid_feat = self.ln_vid(self.ffn_vid(vid_feat) + vid_feat)
-        txt_feat = self.ln_txt(self.ffn_txt(txt_feat) + txt_feat)
+        vid_feat = self.do(self.ln_vid(self.ffn_vid(vid_feat))) + vid_feat
+        txt_feat = self.do(self.ln_txt(self.ffn_txt(txt_feat))) + txt_feat
         return vid_feat, txt_feat
 
 
@@ -331,7 +332,6 @@ class SegFormerXFPN(nn.Module):
 #         return SegFormerXFPN(segformerx, intermediate_hidden_size=cfg.d_model_lvls, fpn_hidden_size=cfg.hidden_size)
 #     else:
 #         return segformerx
-
 
 # if __name__ == "__main__":
 #     num_layer = 3

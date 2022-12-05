@@ -1,0 +1,72 @@
+/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/lightning_lite/plugins/environments/slurm.py:167: PossibleUserWarning: The `srun` command is available on your system but is not used. HINT: If your intention is to run Lightning on SLURM, prepend your python command with `srun` like so: srun python main.py ./config/ms_temporal_detr/ms_temporal_detr_i ...
+  rank_zero_warn(
+Trainer already configured with model summary callbacks: [<class 'pytorch_lightning.callbacks.rich_model_summary.RichModelSummary'>]. Skipping setting a default `ModelSummary` callback.
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+Traceback (most recent call last):
+  File "/export/home2/kningtg/WORKSPACE/moment-retrieval/query-moment/main.py", line 81, in <module>
+    main(args)
+  File "/export/home2/kningtg/WORKSPACE/moment-retrieval/query-moment/main.py", line 75, in main
+    trainer.fit(model=module, datamodule=datamodule)
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/pytorch_lightning/trainer/trainer.py", line 582, in fit
+    call._call_and_handle_interrupt(
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/pytorch_lightning/trainer/call.py", line 36, in _call_and_handle_interrupt
+    return trainer.strategy.launcher.launch(trainer_fn, *args, trainer=trainer, **kwargs)
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/pytorch_lightning/strategies/launchers/multiprocessing.py", line 113, in launch
+    mp.start_processes(
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/torch/multiprocessing/spawn.py", line 198, in start_processes
+    while not context.join():
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/torch/multiprocessing/spawn.py", line 160, in join
+    raise ProcessRaisedException(msg, error_index, failed_process.pid)
+torch.multiprocessing.spawn.ProcessRaisedException:
+-- Process 1 terminated with the following error:
+Traceback (most recent call last):
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/torch/multiprocessing/spawn.py", line 69, in _wrap
+    fn(i, *args)
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/pytorch_lightning/strategies/launchers/multiprocessing.py", line 139, in _wrapping_function
+    results = function(*args, **kwargs)
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/pytorch_lightning/trainer/trainer.py", line 624, in _fit_impl
+    self._run(model, ckpt_path=self.ckpt_path)
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/pytorch_lightning/trainer/trainer.py", line 1061, in _run
+    results = self._run_stage()
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/pytorch_lightning/trainer/trainer.py", line 1140, in _run_stage
+    self._run_train()
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/pytorch_lightning/trainer/trainer.py", line 1153, in _run_train
+    self._run_sanity_check()
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/pytorch_lightning/trainer/trainer.py", line 1225, in _run_sanity_check
+    val_loop.run()
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/pytorch_lightning/loops/loop.py", line 199, in run
+    self.advance(*args, **kwargs)
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/pytorch_lightning/loops/dataloader/evaluation_loop.py", line 152, in advance
+    dl_outputs = self.epoch_loop.run(self._data_fetcher, dl_max_batches, kwargs)
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/pytorch_lightning/loops/loop.py", line 194, in run
+    self.on_run_start(*args, **kwargs)
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/pytorch_lightning/loops/epoch/evaluation_epoch_loop.py", line 84, in on_run_start
+    self._data_fetcher = iter(data_fetcher)
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/pytorch_lightning/utilities/fetching.py", line 178, in __iter__
+    self.dataloader_iter = iter(self.dataloader)
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/torch/utils/data/dataloader.py", line 435, in __iter__
+    return self._get_iterator()
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/torch/utils/data/dataloader.py", line 381, in _get_iterator
+    return _MultiProcessingDataLoaderIter(self)
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/torch/utils/data/dataloader.py", line 1034, in __init__
+    w.start()
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/multiprocessing/process.py", line 121, in start
+    self._popen = self._Popen(self)
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/multiprocessing/context.py", line 224, in _Popen
+    return _default_context.get_context().Process._Popen(process_obj)
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/multiprocessing/context.py", line 288, in _Popen
+    return Popen(process_obj)
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/multiprocessing/popen_spawn_posix.py", line 32, in __init__
+    super().__init__(process_obj)
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/multiprocessing/popen_fork.py", line 19, in __init__
+    self._launch(process_obj)
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/multiprocessing/popen_spawn_posix.py", line 47, in _launch
+    reduction.dump(process_obj, fp)
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/multiprocessing/reduction.py", line 60, in dump
+    ForkingPickler(file, protocol).dump(obj)
+  File "/export/home2/kningtg/miniconda3/envs/torch/lib/python3.10/site-packages/h5py/_hl/base.py", line 368, in __getnewargs__
+    raise TypeError("h5py objects cannot be pickled")
+TypeError: h5py objects cannot be pickled

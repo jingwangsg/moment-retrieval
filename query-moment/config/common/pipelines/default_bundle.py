@@ -13,7 +13,8 @@ rename = L(Rename)(
         "video_feat.sample.pad",
         "video_feat.sample.mask",
     ],
-    to_keys=["text_feat", "text_mask", "vid_feat", "vid_mask"])
+    to_keys=["txt_feat", "txt_mask", "vid_feat", "vid_mask"])
+
 
 # text_feat, vid_feat -> text_feat, text_mask, vid_feat, vid_mask
 processors = [sample_video, pad_video, pad_text, rename]

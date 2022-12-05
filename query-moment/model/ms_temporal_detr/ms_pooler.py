@@ -33,7 +33,7 @@ class RoIAlign1D(nn.Module):
                               aligned=True).squeeze(-1)
         chunk_sizes = [len(x) for x in roi_boxxes_batch]
         align_res = list(align_res.split(chunk_sizes, dim=0))
-        align_res = [x.transpose(1,2) for x in align_res]
+        align_res = [x.transpose(1, 2) for x in align_res]
 
         return align_res
 
@@ -50,7 +50,8 @@ class MultiScaleRoIAlign1D(nn.Module):
         for feat in feat_lvls:
             Lv = feat.shape[1]
             cur_roi_boxxes_batch = [x * Lv for x in roi_boxxes_batch]
-            align_res_lvls += [self.roi_align_1d(feat, cur_roi_boxxes_batch)]
+            cur_item = self.roi_align_1d(feat, cur_roi_boxxes_batch)
+            align_res_lvls += [cur_item]
         return align_res_lvls
 
 
