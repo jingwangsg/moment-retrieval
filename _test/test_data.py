@@ -15,18 +15,19 @@ def test_dp_default():
     cache_dir = "/export/home2/kningtg/WORKSPACE/moment-retrieval/data-bin/cache"
     from omegaconf import OmegaConf
 
-    cfg = dict(data=dict(dataset="charades",
+    cfg = dict(data=dict(dataset="activitynet",
                          dataset_dir=dataset_dir,
                          vid_hdf5="i3d.hdf5",
                          vid_hdf5_key_template="{video_id}",
-                         use_word_mask=True,
+                         txt_hdf5="roberta-large.txt.hdf5",
+                         txt_hdf5_key_template="{text_id}/last_hidden_state",
                          max_len_video=128),
                train=dict(batch_size=16, num_workers=8, prefetch_factors=5),
                paths=dict(cache_dir=cache_dir))
 
     cfg = OmegaConf.create(cfg)
     datapipe = build_datapipe_default(cfg, "train")
-    # train_x = iter(datapipe).__next__()
+    train_x = iter(datapipe).__next__()
     # datapipe = build_datapipe_default(cfg, "val")
     # val_x = iter(datapipe).__next__()
     # datapipe = build_datapipe_default(cfg, "test")

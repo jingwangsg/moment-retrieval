@@ -30,7 +30,7 @@ def nms(pred_bds, scores, batch_idxs, iou_threshold):
         cur_batch_indices = nms_idxs == b
         nms_pred_bds.append(nms_pred_bds_flatten[cur_batch_indices])
         nms_scores.append(nms_scores_flatten[cur_batch_indices])
-    
+
     return nms_pred_bds, nms_scores
 
 

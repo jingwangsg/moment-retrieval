@@ -37,31 +37,27 @@ Lt = 100
 D_TXT = 300
 D_VID = 1024
 
-model = L(MultiScaleTemporalDetr)(backbone=L(SegFormerXFPN)(backbone=L(SegFormerX)(
-    d_model_in=d_model,
-    d_model_lvls=[1024, 1024, 1024, 1024],
-    num_head_lvls=[4, 8, 16, 16],
-    ff_dim_lvls=[2048, 2048, 2048, 2048],
-    sr_ratio_lvls=[4, 2, 2, 1],
-    max_vid_len=Lv,
-    max_txt_len=Lt,
-    input_txt_dim=D_TXT,
-    input_vid_dim=D_VID,
-    dropout=dropout),
-                                                            intermediate_hidden_size=[1024, 1024, 1024, 1024],
-                                                            fpn_hidden_size=d_model),
-                                  head=L(QueryBasedDecoder)(d_model=d_model,
-                                                            nhead=16,
-                                                            ff_dim=2048,
-                                                            num_query=300,
-                                                            num_layers=5,
-                                                            num_scales=4,
-                                                            pooler_resolution=16,
-                                                            dim_init_ref=1,
-                                                            dropout=dropout,
-                                                            loss_cfg=dict(assign_topk=1,
-                                                                          aux_loss=0.01,
-                                                                          l1_loss=2.0,
-                                                                          focal_loss=1.0)))
+model = L(MultiScaleTemporalDetr)(backbone=None, head=None)
+model.backbone = L(SegFormerXFPN)(backbone=L(SegFormerX)(d_model_in=d_model,
+                                                         d_model_lvls=[1024, 1024, 1024, 1024],
+                                                         num_head_lvls=[4, 8, 16, 16],
+                                                         ff_dim_lvls=[2048, 2048, 2048, 2048],
+                                                         sr_ratio_lvls=[4, 2, 2, 1],
+                                                         max_vid_len=Lv,
+                                                         max_txt_len=Lt,
+                                                         input_txt_dim=D_TXT,
+                                                         input_vid_dim=D_VID,
+                                                         dropout=dropout),
+                                  intermediate_hidden_size=[1024, 1024, 1024, 1024],
+                                  fpn_hidden_size=d_model)
+model.head = L(QueryBasedDecoder)(d_model=d_model,
+                                  nhead=16,
+                                  ff_dim=2048,
+                                  num_query=300,
+                                  num_layers=5,
+                                  num_scales=4,
+                                  pooler_resolution=16,
+                                  dim_init_ref=1,
+                                  dropout=dropout,
+                                  loss_cfg=dict(assign_topk=1, aux_loss=0.01, l1_loss=2.0, focal_loss=1.0))
 
-# from model.ms_temporal_detr import

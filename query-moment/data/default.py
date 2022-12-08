@@ -1,7 +1,7 @@
 import os.path as osp
 from .datapipe import *
 import numpy as np
-
+prepare_for_ddp
 
 def get_word_mask_(result, mask_rate=0.15):
     text_inds = result["text.inds"]
@@ -32,6 +32,10 @@ def get_word_mask(result, mask_rate=0.15):
 
     return result
 
+def _squeeze0(result):
+    x = result["text.hdf5"]
+    result["text.hdf5"] = x.squeeze(0)
+    return result
 
 def build_datapipe_default(cfg, split):
     dataset_dir = cfg.data.dataset_dir
@@ -41,21 +45,21 @@ def build_datapipe_default(cfg, split):
     txt_hdf5 = osp.join(dataset_dir, cfg.data.txt_hdf5)
     txt_hdf5_key_template = cfg.data.txt_hdf5_key_template
     batch_size = cfg.train.batch_size
-    vocab_file = osp.join(dataset_dir, "annot", "vocab.txt")
-    cache_dir = cfg.paths.cache_dir
+    # vocab_file = osp.join(dataset_dir, "annot", "vocab.txt")
+    # cache_dir = cfg.paths.cache_dir
     is_train = (split == "train")
 
     # parse dataset
     dataset_dp = build_tsgv_parser(cfg, split=split)
     # filter nonexisted hdf5 key
     dataset_dp = dataset_dp.filter_by_hdf5_key(hdf5_file=vid_hdf5, key_template=vid_hdf5_key_template)
-    if split == "train":
-        dataset_dp = dataset_dp.shuffle()
-    # load text feature
-    # dataset_dp = dataset_dp.
-
-    # memory cache
     dataset_dp = dataset_dp.in_memory_cache()
+
+    # shuffle + sharding_filter
+    dataset_dp = prepare_for_ddp(dataset_dp)
+
+    # load text feature
+    dataset_dp = dataset_dp.load_hdf5(hdf5_file=txt_hdf5, key_template=txt_hdf5_key_template, output_key_prefix="text").map(_squeeze0)
 
     if is_train:
         dataset_dp = dataset_dp.shuffle()
@@ -70,12 +74,10 @@ def build_datapipe_default(cfg, split):
 
     # pad
     dataset_dp = dataset_dp.pad_sequence(from_key="video.hdf5", axis=0, fill_value=0.0)
-    dataset_dp = dataset_dp.pad_sequence(from_key="text.embs", axis=0, fill_value=0.0)
-    dataset_dp = dataset_dp.pad_sequence(from_key="text.inds", axis=0, fill_value=0, return_mask=False)
+    dataset_dp = dataset_dp.pad_sequence(from_key="text.hdf5", axis=0, fill_value=0.0)
 
     # collect
-    dataset_dp = dataset_dp.collect(["video.hdf5.pad", "video.hdf5.mask", "text.embs.pad", "text.embs.mask"])
+    dataset_dp = dataset_dp.collect(["video.hdf5.pad", "video.hdf5.mask", "text.hdf5.pad", "text.hdf5.mask"])
 
     dataset_dp = dataset_dp.collate(default_collate_fn)
-    dataset_dp = dataset_dp.to_map_datapipe()
     return dataset_dp
