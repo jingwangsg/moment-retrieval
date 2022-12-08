@@ -28,7 +28,7 @@ def test_distributed_dataloader2():
     rank = int(os.environ["RANK"])
     world_size = int(os.environ["WORLD_SIZE"])
 
-    datapipe = IterableWrapper([torch.tensor([i]) for i in range(21)])
+    datapipe = IterableWrapper([torch.tensor([i]) for i in range(19)])
     datapipe = prepare_for_ddp(datapipe)
 
     dataloader = DataLoader2(datapipe, reading_service=PrototypeMultiProcessingReadingService(num_workers=8))
