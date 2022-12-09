@@ -38,6 +38,7 @@ def load_data_tacos():
         json_file = osp.join(annot_dir, domain + ".json")
         json_dict = load_json(json_file)
         for video_id, annot in json_dict.items():
+            video_id = video_id[:-4]
             for idx, sentence in enumerate(annot["sentences"]):
                 text_id = f"{video_id}_{idx}"
                 cur_elem = dict(text_id=text_id, text=sentence)

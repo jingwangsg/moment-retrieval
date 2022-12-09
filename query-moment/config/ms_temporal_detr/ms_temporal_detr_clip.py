@@ -25,7 +25,7 @@ train = dict(
     # lr_scheduler=(StepLR)()
 )
 
-from model.ms_temporal_detr import MultiScaleTemporalDetr, SegFormerXFPN, SegFormerX, QueryBasedDecoder
+from __model.ms_temporal_detr import MultiScaleTemporalDetr, SegFormerXFPN, SegFormerX, QueryBasedDecoder
 
 d_model = 1024
 dropout = 0.1

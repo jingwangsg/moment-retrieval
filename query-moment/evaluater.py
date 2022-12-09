@@ -46,7 +46,7 @@ class RankMIoUAboveN(Metric):
             gt = gt_batch[i]
             scores = scores_batch[i]
 
-            _, sorted_index = torch.sort(scores)
+            _, sorted_index = torch.sort(scores, descending=True)
             pred_bds = pred_bds[sorted_index][:self.m]
 
             Nc, _2 = pred_bds.shape
@@ -57,7 +57,7 @@ class RankMIoUAboveN(Metric):
             self.num_sample += 1
 
     def compute(self):
-        return self.hit / self.num_sample
+        return self.hit / self.num_sample * 100
 
 
 class TrainEvaluater:
@@ -69,10 +69,11 @@ class TrainEvaluater:
         if not hasattr(self, "metrics"):
             self.metrics = dict()
             for loss_nm, loss_val in losses.items():
-                metric = AverageMeter().to(loss_val.device)
+                metric = AverageMeter()
                 self.metrics[loss_nm] = metric
-        for loss_nm, metric in self.metrics.items():
-            metric.update(losses[loss_nm])
+        for k in self.metrics.keys():
+            metric = self.metrics[k]
+            self.metrics[k].update(losses[k])
 
     def compute_all(self):
         ret_dict = dict()
@@ -94,7 +95,7 @@ class ValTestEvaluater:
         ns = cfg.eval.ns
         for m in ms:
             for n in ns:
-                self.metrics[f"Rank{m}@IoU={n:.1f}"] = RankMIoUAboveN(m=m, n=n)
+                self.metrics[f"R{m}@IoU={n:.1f}"] = RankMIoUAboveN(m=m, n=n)
 
     def update_all(self, outputs):
         for metric_nm, metric in self.metrics.items():
@@ -104,8 +105,8 @@ class ValTestEvaluater:
                 gt = outputs["gt"]
                 metric.update(boxxes, scores, gt)
 
-    def compute_all(self, losses):
+    def compute_all(self):
+        ret_dict = dict()
         for metric_nm, metric in self.metrics.items():
-            ret_dict = dict()
             ret_dict[self.domain + "/" + metric_nm] = metric.compute().item()
         return ret_dict

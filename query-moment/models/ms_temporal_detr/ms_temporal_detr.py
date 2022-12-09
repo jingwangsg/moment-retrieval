@@ -6,9 +6,9 @@ from kn_util.general import registry
 from .segformerx import SegFormerXFPN, SegFormerX
 from .ms_pooler import MultiScaleRoIAlign1D
 from misc import inverse_sigmoid, cw2se, calc_iou_score_gt
-from model.loss import l1_loss, focal_loss
-from kn_util.nn.layers import MLP
-from kn_util.nn import clones
+from __model.loss import l1_loss, focal_loss
+from kn_util.nn_utils.layers import MLP
+from kn_util.nn_utils import clones
 from kn_util.general import registry
 from torchvision.ops import sigmoid_focal_loss
 

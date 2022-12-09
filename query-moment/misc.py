@@ -1,7 +1,16 @@
 import torch
 from torchvision.ops import batched_nms
 from einops import repeat, rearrange
+import numpy as np
 
+def format_str(v):
+    if isinstance(v, (float, np.float_)):
+        return f"{v:.4f}"
+    else:
+        return str(v)
+
+def dict2str(cur_dict):
+    return "\t".join([k + " " + format_str(v) for k,v in cur_dict.items()])
 
 def inverse_sigmoid(x, eps=1e-5):
     x = x.clamp(min=0, max=1)
@@ -11,23 +20,23 @@ def inverse_sigmoid(x, eps=1e-5):
 
 
 def nms(pred_bds, scores, batch_idxs, iou_threshold):
-    B, Nc, _2 = pred_bds.shape
+    B, _2 = pred_bds.shape
 
-    zero_pad = torch.zeros(pred_bds.shape[:2], dtype=torch.float32, device=pred_bds.device)
+    zero_pad = torch.zeros(pred_bds.shape[:1], dtype=torch.float32, device=pred_bds.device)
     one_pad = zero_pad + 1
-    boxxes = torch.stack([pred_bds[..., 0], zero_pad, pred_bds[..., 1], one_pad], dim=2)
-    boxxes_flatten = repeat(boxxes, "b nc i -> (b nc) i")
-    scores_flatten = repeat(scores, "b nc -> (b nc)")
+    boxxes = torch.stack([pred_bds[:, 0], zero_pad, pred_bds[:, 1], one_pad], dim=-1)
+    boxxes_flatten = boxxes
+    scores_flatten = scores
 
     nms_indices = batched_nms(boxxes_flatten, scores_flatten, batch_idxs, iou_threshold)
-    nms_pred_bds_flatten = boxxes_flatten[nms_indices, (0, 2)]
+    nms_pred_bds_flatten = boxxes_flatten[nms_indices][:, (0,2)]
     nms_scores_flatten = scores_flatten[nms_indices]
     nms_idxs = batch_idxs[nms_indices]
 
     nms_pred_bds = []
     nms_scores = []
-    for b in range(B):
-        cur_batch_indices = nms_idxs == b
+    for b in range(torch.max(batch_idxs).item() + 1):
+        cur_batch_indices = (nms_idxs == b)
         nms_pred_bds.append(nms_pred_bds_flatten[cur_batch_indices])
         nms_scores.append(nms_scores_flatten[cur_batch_indices])
 

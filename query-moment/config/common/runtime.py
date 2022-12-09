@@ -9,5 +9,6 @@ flags = dict(
     debug=False,
     ddp=False,
     amp=False,
+    train=True,
     seed=3147
 )
