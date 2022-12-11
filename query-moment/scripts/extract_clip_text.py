@@ -10,7 +10,7 @@ import h5py
 from transformers import CLIPTokenizer, CLIPTextModel
 import torch
 from tqdm import tqdm
-from kn_util.file import load_json, save_hdf5, load_csv, LargeHDF5Cache
+from kn_util.basic.file import load_json, save_hdf5, load_csv, LargeHDF5Cache
 import subprocess
 
 data_dir = "/export/home2/kningtg/WORKSPACE/moment-retrieval/data-bin/raw"

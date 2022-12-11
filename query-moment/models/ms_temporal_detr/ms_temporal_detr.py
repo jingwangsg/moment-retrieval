@@ -2,14 +2,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import einsum, repeat, rearrange, reduce
-from kn_util.general import registry
+from kn_util.basic import registry
 from .segformerx import SegFormerXFPN, SegFormerX
 from .ms_pooler import MultiScaleRoIAlign1D
 from misc import inverse_sigmoid, cw2se, calc_iou_score_gt
-from __model.loss import l1_loss, focal_loss
+from .loss import l1_loss, focal_loss
 from kn_util.nn_utils.layers import MLP
 from kn_util.nn_utils import clones
-from kn_util.general import registry
+from kn_util.basic import registry
 from torchvision.ops import sigmoid_focal_loss
 
 

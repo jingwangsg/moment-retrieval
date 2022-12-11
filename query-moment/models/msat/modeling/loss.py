@@ -2,7 +2,8 @@ import torch
 import torch.nn.functional as F
 
 
-def bce_rescale_loss(config, logits_visual, logits_iou, iou_mask_map, gt_maps, gt_times):
+def bce_rescale_loss(config, logits_text, logits_visual, logits_iou, iou_mask_map, gt_maps, gt_times, word_label,
+                     word_mask):
     T = gt_maps.shape[-1]
     joint_prob = torch.sigmoid(logits_visual[:, :3, :])
     gt_p = gt_maps[:, :3, :]
@@ -30,7 +31,23 @@ def bce_rescale_loss(config, logits_visual, logits_iou, iou_mask_map, gt_maps, g
     loss_iou = (F.binary_cross_entropy_with_logits(logits_iou[:, 2, :, :], iou, reduction='none') * temp *
                 torch.pow(torch.sigmoid(logits_iou[:, 2, :, :]) - iou, 2)).sum((1, 2)) / temp.sum((1, 2))
 
-    loss_value = config.w_stage_loss * loss.sum(
-        -1).mean() + config.w_reg_loss * loss_reg.mean() + config.w_iou_loss * loss_iou.mean()
+    log_p = F.log_softmax(logits_text, -1) * word_mask.unsqueeze(2)
 
-    return loss_value, joint_prob, torch.sigmoid(logits_iou[:, 2, :, :]) * temp, s_e_time
+    grid = torch.arange(log_p.shape[-1], device=log_p.device).repeat(log_p.shape[0], log_p.shape[1], 1)
+
+    text_loss = torch.sum(-log_p[grid == word_label.unsqueeze(2)]) / torch.clamp(
+        (word_mask.sum(1) > 0).sum(), min=0.00000001)
+
+    stage_loss = loss.sum(-1).mean()
+    reg_loss = loss_reg.mean()
+    iou_loss = loss_iou.mean()
+    mask_loss = text_loss
+    loss_value = config.w_stage_loss * stage_loss + config.w_reg_loss * reg_loss + config.w_iou_loss * iou_loss + config.w_mask_loss * mask_loss
+
+    loss_dict = dict(stage_loss=stage_loss,
+                     reg_loss=reg_loss,
+                     iou_loss=iou_loss,
+                     mask_loss=mask_loss,
+                     loss=loss_value)
+
+    return loss_dict, joint_prob, torch.sigmoid(logits_iou[:, 2, :, :]) * temp, s_e_time

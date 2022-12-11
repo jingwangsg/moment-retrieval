@@ -3,11 +3,11 @@ from torchdata.dataloader2.dataloader2 import DataLoader2
 # from torch.utils.data import DataLoader
 # from .datapipe.parse import *
 from models import *
-from kn_util.general import registry
+from kn_util.basic import registry
 
 
 def build_datapipe(cfg, split):
-    return registry.build_datapipe(cfg.model_cfg.arch, cfg=cfg, split=split)
+    return registry.build_datapipe(cfg.data.datapipe, cfg=cfg, split=split)
     # if cfg.data.datapipe == "default":
     #     return build_datapipe_default(cfg, split=split)
     # if cfg.data.datapipe == "msat":

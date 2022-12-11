@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from kn_util.nn import clones
+from kn_util.nn_utils import clones
 from einops import einsum, rearrange, repeat, reduce
 import numpy as np
 

@@ -18,14 +18,14 @@ import h5py
 from transformers import CLIPTokenizer, CLIPTextModel
 import torch
 from tqdm import tqdm
-from kn_util.file import load_json, load_csv, LargeHDF5Cache
+from kn_util.basic.file import load_json, load_csv, LargeHDF5Cache
 import subprocess
 import glob
 import torch.multiprocessing as mp
 import torch.distributed as dist
 from tqdm import tqdm
 from kn_util.distributed import get_available_port
-from kn_util.general import get_logger
+from kn_util.basic import get_logger
 import numpy as np
 
 data_dir = "/export/home2/kningtg/WORKSPACE/moment-retrieval/data-bin/raw"

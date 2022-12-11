@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from .modeling import BertPredictionHeadTransform
 from .visual_linguistic_bert import VisualLinguisticBert
 from omegaconf import OmegaConf
+from kn_util.basic import global_get
 
 BERT_WEIGHTS_NAME = 'pytorch_model.bin'
 
@@ -17,6 +18,8 @@ class TLocVLBERT(nn.Module):
 
         config = OmegaConf.create(config)
         self.config = config
+
+        vocab_size = len(global_get("glove_vocab")[0])
 
         if dataset == "ActivityNet".lower():
             iou_mask_map = torch.zeros(33, 33).float()
@@ -48,11 +51,11 @@ class TLocVLBERT(nn.Module):
         classifier_dropout = config.classifier_dropout
 
         if config.classifier_type == "2fc":
-            # self.final_mlp = torch.nn.Sequential(torch.nn.Dropout(classifier_dropout, inplace=False),
-            #                                      torch.nn.Linear(dim, classifier_hidden_size),
-            #                                      torch.nn.ReLU(inplace=True),
-            #                                      torch.nn.Dropout(classifier_dropout, inplace=False),
-            #                                      torch.nn.Linear(classifier_hidden_size, vocab_size=1503))
+            self.final_mlp = torch.nn.Sequential(torch.nn.Dropout(classifier_dropout, inplace=False),
+                                                 torch.nn.Linear(dim, classifier_hidden_size),
+                                                 torch.nn.ReLU(inplace=True),
+                                                 torch.nn.Dropout(classifier_dropout, inplace=False),
+                                                 torch.nn.Linear(classifier_hidden_size, vocab_size))
             self.final_mlp_2 = torch.nn.Sequential(
                 torch.nn.Dropout(classifier_dropout, inplace=False),
                 torch.nn.Linear(dim, dim * 3),
@@ -120,7 +123,7 @@ class TLocVLBERT(nn.Module):
                                                                object_visual_feats,
                                                                output_all_encoded_layers=False)
 
-        # logits_text = self.final_mlp(hidden_states_text)
+        logits_text = self.final_mlp(hidden_states_text)
         hidden_states_object = self.final_mlp_2(hidden_states_object)
         hidden_s, hidden_e, hidden_c = torch.split(hidden_states_object, self.config.hidden_size, dim=-1)
 
@@ -137,4 +140,4 @@ class TLocVLBERT(nn.Module):
                                   -1)
         # logits_visual = logits_visual.permute(0,2,1).contiguous()
 
-        return logits_visual, logits_iou, self.iou_mask_map.clone().detach()
+        return logits_text, logits_visual, logits_iou, self.iou_mask_map.clone().detach()

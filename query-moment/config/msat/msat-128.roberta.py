@@ -12,7 +12,8 @@ data = dict(datapipe="msat",
             target_stride=2,
             vid_hdf5="i3d.hdf5",
             vid_hdf5_key_template="{video_id}",
-            word_mask_rate=0.15)
+            txt_hdf5="roberta-large.txt.hdf5",
+            txt_hdf5_key_template="{text_id}/last_hidden_state")
 
 eval = dict(ms=[1, 5], ns=[0.3, 0.5, 0.7], best_monitor="R1@IoU=0.7", is_best="max")
 
@@ -29,7 +30,6 @@ model_cfg = dict(arch="msat",
                  w_stage_loss=0.3,
                  w_reg_loss=1.0,
                  w_iou_loss=200.0,
-                 w_mask_loss=0.25,
                  num_clips=L(eval_str)(s="${data.max_len_video} // ${data.target_stride}"),
                  nms_threshold=0.37,
                  dropout=0.1)
@@ -38,7 +38,7 @@ model = L(TAN)(frame_layer=L(FrameAvgPool)(kernel_size=2, stride=2),
                bert_layer=L(TLocVLBERT)(dataset="${data.dataset}",
                                         visual_size=1024,
                                         hidden_size=512,
-                                        input_size_txt=300,
+                                        input_size_txt=1024,
                                         num_hidden_layers=6,
                                         num_attention_heads=32,
                                         intermediate_size=512,

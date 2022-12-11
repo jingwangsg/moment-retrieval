@@ -4,9 +4,20 @@ import torch.nn as nn
 from .modeling import BertLayerNorm, BertEncoder, BertPooler, ACT2FN, BertOnlyMLMHead
 import numpy as np
 import math
+from kn_util.basic import registry
 
 # todo: add this to config
 # NUM_SPECIAL_WORDS = 1000
+
+
+class LearnPositionalEncoding(nn.Module):
+
+    def __init__(self, d_hid, n_position=116) -> None:
+        super().__init__()
+        self.pe = nn.Embedding(num_embeddings=n_position, embedding_dim=d_hid)
+
+    def forward(self, x):
+        return x + self.pe.weight[None, :x.size(1)]
 
 
 class PositionalEncoding(nn.Module):
@@ -73,7 +84,17 @@ class VisualLinguisticBert(BaseModel):
         self.visual_embedding_LayerNorm = BertLayerNorm(config.hidden_size, eps=1e-12)
         self.visual_embedding_dropout = nn.Dropout(config.hidden_dropout_prob)
 
-        self.postion_encoding = PositionalEncoding(config.hidden_size, n_position=500)
+        n_position=300
+        if registry.get_object("glove_vocab"):
+            if dataset == "ActivityNet":
+                n_position=120
+            elif dataset == "TACoS":
+                n_position=200
+
+        if config.pe == "sine":
+            self.postion_encoding = PositionalEncoding(config.hidden_size, n_position=n_position)
+        else:
+            self.postion_encoding = LearnPositionalEncoding(config.hidden_size, n_position=n_position)
 
         # visual transform
         self.visual_1x1_text = None

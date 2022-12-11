@@ -3,8 +3,7 @@ import sys
 import os.path as osp
 
 sys.path.insert(0, "/export/home2/kningtg/WORKSPACE/moment-retrieval/query-moment")
-from data.default import build_datapipe_default
-from data.build import build_dataloader
+from data.build import build_dataloader, build_datapipe
 from tqdm import tqdm
 import argparse
 
@@ -15,18 +14,21 @@ def test_dp_default():
     cache_dir = "/export/home2/kningtg/WORKSPACE/moment-retrieval/data-bin/cache"
     from omegaconf import OmegaConf
 
-    cfg = dict(data=dict(dataset="activitynet",
+    cfg = dict(data=dict(datapipe="msat",
+                         dataset="activitynet",
                          dataset_dir=dataset_dir,
                          vid_hdf5="i3d.hdf5",
                          vid_hdf5_key_template="{video_id}",
                          txt_hdf5="roberta-large.txt.hdf5",
                          txt_hdf5_key_template="{text_id}/last_hidden_state",
-                         max_len_video=128),
+                         max_len_video=256,
+                         target_stride=2),
                train=dict(batch_size=16, num_workers=8, prefetch_factors=5),
-               paths=dict(cache_dir=cache_dir))
+               paths=dict(cache_dir=cache_dir),
+               model_cfg=dict(arch="msat"))
 
     cfg = OmegaConf.create(cfg)
-    datapipe = build_datapipe_default(cfg, "train")
+    datapipe = build_datapipe(cfg, "train")
     train_x = iter(datapipe).__next__()
     # datapipe = build_datapipe_default(cfg, "val")
     # val_x = iter(datapipe).__next__()

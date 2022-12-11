@@ -6,7 +6,7 @@ import os.path as osp
 sys.path.insert(0, osp.join(osp.dirname(__file__), "../.."))
 from torchdata.datapipes.iter import IterDataPipe
 from data.datapipe import *
-from kn_util.general import registry
+from kn_util.basic import registry
 import torch.nn.functional as F
 
 
@@ -129,8 +129,8 @@ def after_collate(result):
     return result
 
 
-@registry.register_datapipe("msat")
-def build_datapipe(cfg, split):
+@registry.register_datapipe("msat_roberta_wo_mask")
+def build_datapipe_msat_roberta_wo_mask(cfg, split):
     dataset = cfg.data.dataset
     assert dataset != "charades"
     dataset_dir = cfg.data.dataset_dir
@@ -145,14 +145,13 @@ def build_datapipe(cfg, split):
     is_train = (split == "train")
 
     # parse dataset
-    dataset_dp = build_tsgv_parser(cfg, split=split)
+    dataset_dp = build_tsvg_parser(cfg, split=split)
     # filter nonexisted hdf5 key
     dataset_dp = dataset_dp.filter_by_hdf5_key(hdf5_file=vid_hdf5, key_template=vid_hdf5_key_template)
     dataset_dp = dataset_dp.in_memory_cache()
 
     # shuffle + sharding_filter
     dataset_dp = prepare_for_dataloader(dataset_dp, batch_size=batch_size, is_train=is_train)
-    # dataset_dp = prepare_for_dataloader(dataset_dp, batch_size=batch_size, is_train=False)
     num_samples = len(list(dataset_dp))
 
     # load text feature
@@ -190,9 +189,101 @@ def build_datapipe(cfg, split):
     dataset_dp = dataset_dp.pad_sequence(from_key="text.hdf5", axis=0, fill_value=0.0)
 
     # collect
-    dataset_dp = dataset_dp.collect(["video.hdf5.pad", "text.hdf5.pad", "text.hdf5.mask", "gt_times", "map_gt", "gt"],
-                                    ["visual_input", "textual_input", "textual_mask", "gt_times", "gt_maps", "gt"])
+    dataset_dp = dataset_dp.collect(
+        ["video.hdf5.pad", "text.hdf5.pad", "text.hdf5.mask", "gt_times", "map_gt", "gt", "text_id"],
+        ["visual_input", "textual_input", "textual_mask", "gt_times", "gt_maps", "gt", "text_id"])
 
     dataset_dp = dataset_dp.collate(default_collate_fn).map(after_collate)
-    x = iter(dataset_dp).__next__()
+
+    return dataset_dp.set_length(num_batches)
+
+
+def get_word_mask(result, mask_rate=0.15):
+    text_inds = result["text.inds"]
+
+    length_text = len(text_inds)
+    word_mask = np.array([np.random.uniform() < mask_rate for _ in range(length_text)])
+
+    if np.sum(word_mask) == 0 or np.sum(word_mask) == length_text:
+        random_idx = np.random.choice(np.arange(length_text))
+        word_mask[random_idx] ^= 1
+
+    result["word_mask"] = word_mask
+
+    return result
+
+
+@registry.register_datapipe("msat")
+def build_datapipe_msat(cfg, split):
+    dataset = cfg.data.dataset
+    assert dataset != "charades"
+    dataset_dir = cfg.data.dataset_dir
+    max_len_video = cfg.data.max_len_video
+    vid_hdf5 = osp.join(dataset_dir, cfg.data.vid_hdf5)
+    vid_hdf5_key_template = cfg.data.vid_hdf5_key_template
+    batch_size = cfg.train.batch_size
+    use_word_mask = cfg.data.word_mask_rate > 0.0
+    is_train = (split == "train")
+
+    # parse dataset
+    dataset_dp = build_tsvg_parser(cfg, split=split)
+    # filter nonexisted hdf5 key
+    dataset_dp = dataset_dp.filter_by_hdf5_key(hdf5_file=vid_hdf5, key_template=vid_hdf5_key_template)
+    dataset_dp = dataset_dp.in_memory_cache()
+
+    # shuffle + sharding_filter
+    dataset_dp = prepare_for_dataloader(dataset_dp, batch_size=batch_size, is_train=is_train)
+    num_samples = len(list(dataset_dp))
+
+    # load text feature
+    dataset_dp = dataset_dp.tokenize_glove(vocab_file=osp.join(cfg.data.dataset_dir, "annot", "vocab.txt"),
+                                           cache_dir=osp.join(cfg.paths.cache_dir, ".glove"),
+                                           to_embeddings=True,
+                                           to_indices=True,
+                                           upload_vocab_key="glove_vocab",
+                                           from_key="text")
+    # load video feature
+    dataset_dp = dataset_dp.load_hdf5(hdf5_file=vid_hdf5, key_template=vid_hdf5_key_template, output_key_prefix="video")
+    dataset_dp = dataset_dp.map(after_load_vid)
+    # sample video feature
+    dataset_dp = dataset_dp.sample_sequence(from_key="video.hdf5",
+                                            axis=0,
+                                            stride="round",
+                                            max_len=max_len_video,
+                                            inplace=True,
+                                            mode="avgpool")
+
+    # process annotation
+    num_clips = cfg.data.max_len_video // cfg.data.target_stride
+    if dataset == "activitynet":
+        dataset_dp = ActivityNetAnnotationProcessor(dataset_dp, num_clips)
+    if dataset == "tacos":
+        dataset_dp = TACoSAnnotationProcessor(dataset_dp, num_clips)
+
+    # add word mask
+    if use_word_mask:
+        dataset_dp = dataset_dp.map(get_word_mask)
+
+    # ========== BATCH BELOW ==========
+    num_batches = int(np.ceil(num_samples / batch_size))
+    # batchify
+    dataset_dp = dataset_dp.batch(batch_size).rows2columnar()
+
+    # pad
+    dataset_dp = dataset_dp.pad_sequence(from_key="video.hdf5",
+                                         axis=0,
+                                         fill_value="last",
+                                         to_length=cfg.data.max_len_video)
+    dataset_dp = dataset_dp.pad_sequence(from_key="text.embs", axis=0, fill_value=0.0)
+    dataset_dp = dataset_dp.pad_sequence(from_key="text.inds", axis=0, fill_value=0.0, return_mask=False)
+    dataset_dp = dataset_dp.pad_sequence(from_key="word_mask", axis=0, fill_value=False, return_mask=False)
+
+    # collect
+    dataset_dp = dataset_dp.collect([
+        "video.hdf5.pad", "text.embs.pad", "text.embs.mask", "text.inds.pad", "word_mask.pad", "gt_times", "map_gt",
+        "gt"
+    ], ["visual_input", "textual_input", "textual_mask", "word_label", "word_mask", "gt_times", "gt_maps", "gt"])
+
+    dataset_dp = dataset_dp.collate(default_collate_fn).map(after_collate)
+
     return dataset_dp.set_length(num_batches)
