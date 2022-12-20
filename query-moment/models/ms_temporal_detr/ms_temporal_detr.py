@@ -3,15 +3,19 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import einsum, repeat, rearrange, reduce
 from kn_util.basic import registry
-from .segformerx import SegFormerXFPN, SegFormerX
+from ..backbone.segformerx import SegFormerXFPN, SegFormerX
 from .ms_pooler import MultiScaleRoIAlign1D
-from misc import inverse_sigmoid, cw2se, calc_iou_score_gt
-from .loss import l1_loss, focal_loss
+from misc import cw2se, calc_iou
+from ..loss import l1_loss, iou_loss
 from kn_util.nn_utils.layers import MLP
 from kn_util.nn_utils import clones
+from kn_util.nn_utils.math import inverse_sigmoid_torch, gaussian_torch
 from kn_util.basic import registry
+from kn_util.basic import global_get as GG
 from torchvision.ops import sigmoid_focal_loss
-
+from kn_util.nn_utils.init import init_module
+import os
+from functools import partial
 
 class QueryBasedDecoder(nn.Module):
 
@@ -24,20 +28,30 @@ class QueryBasedDecoder(nn.Module):
                  num_scales=4,
                  pooler_resolution=16,
                  dim_init_ref=1,
-                 dropout=0.1,
-                 loss_cfg=None) -> None:
+                 dropout=0.1) -> None:
         super().__init__()
         self.query_embeddings = nn.Embedding(num_query, d_model)
+        self.d_model = d_model
 
-        bbox_head = MLP(d_model, d_model, 2, 3)
-        nn.init.constant_(bbox_head.layers[-1].weight.data, 0)
-        nn.init.constant_(bbox_head.layers[-1].bias.data, 0)
+        bbox_head = MLP(d_model, d_model, 2, 3, activation="prelu")
         self.bbox_heads = clones(bbox_head, num_layers)
-        self.reference_head = MLP(d_model, d_model, dim_init_ref, 3)
-        score_head = MLP(d_model, d_model, 1)
+        self.reference_head = MLP(d_model, d_model, dim_init_ref, 3, activation="prelu")
+        score_head = MLP(d_model, d_model, 1, activation="prelu")
         self.score_heads = clones(score_head, num_layers)
+
+        vocab = GG("glove_vocab")
+        vocab_size = 1513 if vocab is None else len(vocab[0])
+        # text mlp
+        self.text_clf = MLP(d_model, d_model, vocab_size, activation="prelu")
+        self.text_clf.apply(init_module)
+
+        # stage mlp
+        self.stage_mlp1 = clones(nn.Linear(d_model, 3 * d_model), num_scales)
+        self.stage_mlps = clones(clones(MLP(d_model, d_model, 1), 3), num_scales)
+        self.stage_mlp1.apply(init_module)
+        self.stage_mlps.apply(init_module)
+
         self.num_layers = num_layers
-        torch.nn.init.constant_(self.bbox_heads[0].layers[-1].bias.data[1:], -2.0)
         # make sure first offset is reasonable
 
         layer = nn.TransformerDecoderLayer(d_model, nhead, ff_dim, dropout=dropout, batch_first=True)
@@ -48,9 +62,13 @@ class QueryBasedDecoder(nn.Module):
 
         # prepare for processing pooled_feat
         pool_ffn = MLP(d_model * pooler_resolution * num_scales,\
-                        d_model, d_model)
+                        d_model, d_model, activation="prelu")
         self.pool_ffns = clones(pool_ffn, num_layers)
-        self.loss_cfg = loss_cfg
+        self.pool_ffns.apply(init_module)
+
+        nn.init.constant_(self.bbox_heads[0].layers[-1].bias.data[1:], -2.0)
+        # for head in self.bbox_heads:
+        #     nn.init.constant_(head.layers[-1].bias.data[1:], -2.0)
 
     def get_initital_reference(self, offset, reference_no_sigmoid):
         if reference_no_sigmoid.shape[-1] == 1:
@@ -61,87 +79,47 @@ class QueryBasedDecoder(nn.Module):
 
         return offset
 
-    def compute_loss(self, score, proposal, gt):
-        score = score.squeeze(-1)
-        B, Nq = score.shape
-
-        ret_dict = dict()
-        loss = 0.0
-
-        expanded_proposal = rearrange(proposal, "b nq i -> (b nq) i")
-        expanded_gt = repeat(gt, "b i -> (b nq) i", nq=Nq)
-        iou_score = calc_iou_score_gt(expanded_proposal, expanded_gt, "giou")
-        assign_score = rearrange(iou_score, "(b nq) -> b nq", nq=Nq)
-        topk = self.loss_cfg["assign_topk"]
-        indices = torch.topk(assign_score, k=topk, dim=1).indices
-        # assign indices as positive, others as negative (background class)
-        score_gt = assign_score
-        positive_proposal = []
-        for idx, inds in enumerate(indices):
-            score_gt[idx, inds] = 1
-            positive_proposal += [proposal[idx, inds]]
-        positive_proposal = torch.stack(positive_proposal, dim=0)
-
-        if "l1_loss" in self.loss_cfg:
-            # only calculates l1 loss for positive
-            # no need to compute l1 loss for negative!
-            l1_loss_val = l1_loss(positive_proposal, gt)
-            loss += l1_loss_val * self.loss_cfg["l1_loss"]
-            ret_dict["l1_loss"] = l1_loss_val
-
-        if "focal_loss" in self.loss_cfg:
-            # focal_loss_val = focal_loss(score, proposal, gt)
-            focal_loss_val = sigmoid_focal_loss(score, score_gt, reduction="mean")
-            loss += focal_loss_val * self.loss_cfg["focal_loss"]
-            ret_dict["focal_loss"] = focal_loss_val
-
-        ret_dict["loss"] = loss
-        ret_dict["topk_indices"] = indices
-        return ret_dict
-
-    def forward(self, feat_lvls, mask_lvls, gt=None, mode="tensor"):
+    def forward(self, feat_lvls, txt_feat):
         B = feat_lvls[0].shape[0]
+        text_logits = self.text_clf(txt_feat)
 
         query_embeddings = self.query_embeddings.weight
         memory = feat_lvls[-1]
-        mask = mask_lvls[-1]
         tgt = repeat(query_embeddings, "nq d -> b nq d", b=B)
         reference = None
-        loss = 0.0
-        ret_dict = dict()
+        proposal_lvls = []
+        score_lvls = []
+        stage_logits_lvls = []
+
+        for idx, vid_feat in enumerate(feat_lvls):
+            vid_feat_stage = self.stage_mlp1[idx](vid_feat)
+            hidden_st, hidden_ed, hidden_md = torch.split(vid_feat_stage, self.d_model, dim=-1)
+            logits_st = self.stage_mlps[idx][0](hidden_st)
+            logits_ed = self.stage_mlps[idx][1](hidden_ed)
+            logits_md = self.stage_mlps[idx][2](hidden_md)
+            stage_logits = torch.cat([logits_st, logits_ed, logits_md], dim=-1)
+            stage_logits_lvls.append(stage_logits)
 
         for idx, layer in enumerate(self.layers):
-            output = layer(tgt, memory, memory_key_padding_mask=~mask)  # B, Nq, D
+            output = layer(tgt, memory)  # B, Nq, D
 
-            offset = self.bbox_heads[idx](output)
+            # get score
             score_logits = self.score_heads[idx](output)
-            score = score_logits.sigmoid()
-            reference_no_sigmoid = self.reference_head(query_embeddings)
+            score = score_logits.squeeze(-1)
+            score_lvls.append(score)
 
+            # box refine / get initial box
+            offset = self.bbox_heads[idx](output)
+            reference_no_sigmoid = self.reference_head(query_embeddings)
             if idx == 0:
                 offset = self.get_initital_reference(offset, reference_no_sigmoid)
             else:
-                offset = inverse_sigmoid(reference) + offset
-            reference = offset.sigmoid()
+                offset = inverse_sigmoid_torch(reference) + offset
+            reference = offset.sigmoid().detach()
             proposal = cw2se(reference)
-            """<DEBUG> output_proposal"""
-            if registry.get_object("output_proposal", False):
-                registry.set_object(f"proposal_{idx}", proposal.detach().cpu().numpy())
-            """<DEBUG>"""
+            proposal_lvls.append(proposal)
 
-            # calculate loss
-            if mode == "train":
-                cur_loss_dict = self.compute_loss(score, proposal, gt)
-                weight = self.loss_cfg["aux_loss"] if idx == self.num_layers - 1 else 1.0
-                loss += cur_loss_dict["loss"] * weight
-
-                indices = cur_loss_dict.pop("topk_indices")
-                # print(f"========indices {idx}==========")
-                # print(indices)
-
-                for loss_nm, loss_val in cur_loss_dict.items():
-                    ret_dict[f"stage{idx}_{loss_nm}"] = loss_val
-
+            # roi pool & concat
             pooled_feat_list = self.pooler(feat_lvls, proposal)
             # [[(Nq,Rp,D)...x B]...x N_lvls]
             pooled_feat_list = [torch.stack(x, dim=0) for x in pooled_feat_list]
@@ -152,27 +130,138 @@ class QueryBasedDecoder(nn.Module):
             pooled_feat = self.pool_ffns[idx](pooled_feat)
             tgt = pooled_feat + query_embeddings
 
-        if registry.get_object("output_proposal", False):
-            import ipdb
-            ipdb.set_trace()  #FIXME
-
-        if mode == "train":
-            ret_dict["loss"] = loss
-            return ret_dict
-        else:
-            ret_dict["boxxes"] = proposal
-            ret_dict["score"] = score.squeeze(-1)
-            return ret_dict
+        return proposal_lvls, score_lvls, stage_logits_lvls, text_logits
 
 
 class MultiScaleTemporalDetr(nn.Module):
 
-    def __init__(self, backbone, head: QueryBasedDecoder) -> None:
+    def __init__(self, backbone, head, model_cfg) -> None:
         super().__init__()
         self.backbone = backbone
         self.head = head
+        self.model_cfg = model_cfg
 
-    def forward(self, vid_feat, vid_mask, txt_feat, txt_mask, gt=None, mode="tensor", **kwargs):
-        vid_feat_lvls, vid_mask_lvls = self.backbone(vid_feat, vid_mask, txt_feat, txt_mask)
-        ret_dict = self.head(vid_feat_lvls, vid_mask_lvls, gt=gt, mode=mode)
-        return ret_dict
+    def compute_boudary_loss(self, proposal, score, gt, idx, topk_indices_flatten=None):
+        cfg = self.model_cfg
+        loss = 0.0
+
+        logger = GG("logger")
+
+        # use_log = (idx == 2)
+        use_log = False
+
+        B, Nc, _2 = proposal.shape
+
+        iou_gt_flatten = calc_iou(proposal.reshape(B * Nc, 2),
+                                  gt[:, None].repeat(1, Nc, 1).reshape(B * Nc, 2),
+                                  type="giou")
+        iou_gt = iou_gt_flatten.reshape((B, Nc))
+
+        if use_log:
+            logger.info(f"======={idx}=======")
+            logger.info("iou:")
+            logger.info(iou_gt)
+
+        if topk_indices_flatten is None:
+            topk_indices_flatten = torch.topk(iou_gt, k=cfg.topk, dim=1).indices.flatten()
+        batch_indices_flatten = torch.arange(0, B, device=proposal.device)[:, None].repeat(1, cfg.topk).flatten()
+
+        if use_log:
+            logger.info(f"topk_indices:")
+            logger.info(topk_indices_flatten)
+
+        # iou_gt[iou_gt < 0.5] = 0.0
+        iou_gt[batch_indices_flatten, topk_indices_flatten] = 1.0
+        iou_gt[iou_gt < 0.7] = 0.0
+        val_iou_loss = sigmoid_focal_loss(score.flatten(), iou_gt.flatten(), reduction="mean", alpha=cfg.focal_alpha)
+        loss += val_iou_loss * cfg.w_iou_loss
+
+        topk_proposal = proposal[batch_indices_flatten, topk_indices_flatten].reshape(B, cfg.topk, 2)
+
+        if use_log:
+            logger.info("score:")
+            logger.info(score.sigmoid())
+            logger.info("topk_proposal:")
+            logger.info(topk_proposal)
+            logger.info("topk_score:")
+            logger.info(score.sigmoid()[batch_indices_flatten, topk_indices_flatten])
+            logger.info("gt:")
+            logger.info(gt)
+
+        val_l1_loss = l1_loss(topk_proposal, gt)
+        loss += val_l1_loss * cfg.w_l1_loss
+
+        return dict(loss=loss, l1_loss=val_l1_loss, iou_loss=val_iou_loss, topk_indices_flatten=topk_indices_flatten)
+
+    def compute_stage_loss(self, stage_logits, gt):
+        cfg = self.model_cfg
+        sigma_se = 0.25
+        sigma_m = 0.21
+
+        B, Lv, _ = stage_logits.shape
+        gt_mid = ((gt[:, 0] + gt[:, 1]) / 2)[:, None]
+        gt_expanded = torch.cat([gt, gt_mid], dim=-1)
+        gt_times = gt_expanded * Lv
+        sigma = torch.tensor([sigma_se, sigma_se, sigma_m], device=gt.device)[None, :].repeat((B, 1))
+        sigma = sigma * (gt_times[:, 1] - gt_times[:, 0])[:, None]
+
+        stage_label = gaussian_torch(gt_times, sigma, Lv).transpose(1, 2)
+        stage_label[stage_label > 0.8] = 1
+        stage_label[stage_label < 0.4] = 0
+
+        stage_loss = sigmoid_focal_loss(stage_logits, stage_label, reduction="mean")
+        return stage_loss
+
+    def compute_loss(self, proposal_lvls, score_lvls, text_logits, word_mask, word_label, stage_logits_lvls, gt):
+        cfg = self.model_cfg
+        loss = 0.0
+
+        # l1 + iou loss
+        final_layer_losses = self.compute_boudary_loss(proposal_lvls[-1],
+                                                       score_lvls[-1],
+                                                       gt,
+                                                       idx=len(proposal_lvls) - 1)
+        topk_indices_flatten = final_layer_losses.pop("topk_indices_flatten")
+        loss += final_layer_losses["loss"]
+
+        # decoder aux loss
+        dec_aux_loss = 0.0
+        for idx, (proposal, score) in enumerate(zip(proposal_lvls[:-1], score_lvls[:-1])):
+            topk = topk_indices_flatten if os.environ.get("KN_USE_SAME_TOPK", False) else None
+            loss_dict = self.compute_boudary_loss(proposal, score, gt, idx=idx, topk_indices_flatten=topk)
+            dec_aux_loss = loss_dict["loss"]
+            loss += dec_aux_loss * cfg.w_dec_aux_loss
+
+        # encoder aux loss
+        for stage_logits in stage_logits_lvls:
+            enc_aux_loss = self.compute_stage_loss(stage_logits, gt)
+            loss += enc_aux_loss * cfg.w_enc_aux_loss
+
+        # mask loss
+        _shape = text_logits.shape[:2]
+        text_logits_flatten = text_logits.reshape((-1, text_logits.shape[-1]))
+        word_label_flatten = word_label.flatten()
+        mask_loss = F.cross_entropy(text_logits_flatten, word_label_flatten,
+                                    reduction="none") * word_mask[..., None].float()
+        mask_loss = mask_loss.mean()
+        loss += mask_loss * cfg.w_mask_loss
+
+        return dict(**final_layer_losses, mask_loss=mask_loss, enc_aux_loss=enc_aux_loss, dec_aux_loss=dec_aux_loss)
+
+    def forward(self, vid_feat, txt_feat, txt_mask, word_mask=None, word_label=None, gt=None, mode="train", **kwargs):
+        logger = GG("logger")
+
+        if word_mask is None and word_label is None:
+            word_mask = torch.zeros(txt_mask.shape, dtype=torch.bool, device=vid_feat.device)
+            word_label = torch.zeros(txt_mask.shape, dtype=torch.long, device=vid_feat.device)
+        vid_feat_lvls, txt_feat = self.backbone(vid_feat=vid_feat,
+                                                txt_feat=txt_feat,
+                                                txt_mask=txt_mask,
+                                                word_mask=word_mask)
+        proposal_lvls, score_lvls, stage_logits, text_logits = self.head(vid_feat_lvls, txt_feat)
+
+        losses = self.compute_loss(proposal_lvls, score_lvls, text_logits, word_mask, word_label, stage_logits, gt)
+        if mode == "train":
+            return losses
+        else:
+            return dict(scores=score_lvls[-1], boxxes=proposal_lvls[-1], **losses)

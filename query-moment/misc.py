@@ -5,8 +5,7 @@ import numpy as np
 
 def format_str(v, decimals=4):
     if isinstance(v, (float, np.float_)):
-        v = np.round(v ,decimals=decimals)
-        return str(v)
+        return f"{v:.4f}"
     else:
         return str(v)
 
@@ -54,7 +53,7 @@ def nms(pred_bds, scores, batch_idxs, iou_threshold):
 
 
 @torch.no_grad()
-def calc_iou_score_gt(pred_bds, gt, type="iou"):
+def calc_iou(pred_bds, gt, type="iou"):
     """make sure the range between [0, 1) to make loss function happy"""
     min_ed = torch.minimum(pred_bds[:, 1], gt[:, 1])
     max_ed = torch.maximum(pred_bds[:, 1], gt[:, 1])

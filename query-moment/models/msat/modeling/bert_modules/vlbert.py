@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .modeling import BertPredictionHeadTransform
-from .visual_linguistic_bert import VisualLinguisticBert
+from ....backbone.visual_linguistic_bert import VisualLinguisticBert
 from omegaconf import OmegaConf
 from kn_util.basic import global_get
 
@@ -12,14 +12,15 @@ BERT_WEIGHTS_NAME = 'pytorch_model.bin'
 
 class TLocVLBERT(nn.Module):
 
-    def __init__(self, dataset, **config):
+    def __init__(self, dataset, vlbert, **config):
 
         super(TLocVLBERT, self).__init__()
 
         config = OmegaConf.create(config)
         self.config = config
 
-        vocab_size = len(global_get("glove_vocab")[0])
+        vocab = global_get("glove_vocab", None)
+        vocab_size = len(vocab[0]) if vocab else 1000
 
         if dataset == "ActivityNet".lower():
             iou_mask_map = torch.zeros(33, 33).float()
@@ -43,7 +44,10 @@ class TLocVLBERT(nn.Module):
 
         self.register_buffer('iou_mask_map', iou_mask_map)
 
-        self.vlbert = VisualLinguisticBert(dataset, config)
+        if vlbert == "vlbert":
+            self.vlbert = VisualLinguisticBert(dataset, config)
+        elif vlbert == "segformerx":
+            self.vlbert = SegFormerX(dataset, config)
 
         dim = config.hidden_size
         classifier_dropout = config.classifier_dropout
@@ -117,11 +121,8 @@ class TLocVLBERT(nn.Module):
 
         # Visual Linguistic BERT
 
-        hidden_states_text, hidden_states_object = self.vlbert(text_input_feats,
-                                                               text_mask,
-                                                               word_mask,
-                                                               object_visual_feats,
-                                                               output_all_encoded_layers=False)
+        hidden_states_text, hidden_states_object = self.vlbert(text_input_feats, text_mask, word_mask,
+                                                               object_visual_feats)
 
         logits_text = self.final_mlp(hidden_states_text)
         hidden_states_object = self.final_mlp_2(hidden_states_object)

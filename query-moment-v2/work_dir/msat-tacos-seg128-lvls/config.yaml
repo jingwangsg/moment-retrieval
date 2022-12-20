@@ -1,0 +1,94 @@
+flags:
+  debug: false
+  ddp: false
+  amp: false
+  train: true
+  wandb: false
+  seed: 3147
+  exp: msat-tacos-seg128-lvls
+paths:
+  root_dir: /export/home2/kningtg/WORKSPACE/moment-retrieval/query-moment
+  data_dir: /export/home2/kningtg/WORKSPACE/moment-retrieval/data-bin/raw
+  cache_dir: /export/home2/kningtg/WORKSPACE/moment-retrieval/data-bin/cache
+  work_dir: ${paths.root_dir}/work_dir/${flags.exp}
+data:
+  datapipe: msat
+  dataset: tacos
+  dataset_dir: ${paths.data_dir}/${data.dataset}
+  max_len_video: 1024
+  target_stride: 2
+  vid_hdf5: i3d.hdf5
+  vid_hdf5_key_template: '{video_id}'
+  word_mask_rate: 0.15
+eval:
+  ms:
+  - 1
+  - 5
+  ns:
+  - 0.3
+  - 0.5
+  - 0.7
+  best_monitor: R1@IoU=0.7
+  is_best: max
+train:
+  num_workers: 4
+  num_epochs: 100
+  batch_size: 16
+  optimizer:
+    params: null
+    lr: 0.0001
+    betas:
+    - 0.9
+    - 0.999
+    weight_decay: 0.0001
+    _target_: !!python/name:torch.optim.adamw.AdamW ''
+  clip_grad: 10.0
+  lr_scheduler:
+    optimizer: null
+    factor: 0.8
+    patience: 20
+    verbose: true
+    _target_: !!python/name:torch.optim.lr_scheduler.ReduceLROnPlateau ''
+  val_interval: 1.0
+  print_interval: 0.2
+model_cfg:
+  arch: msat
+  w_stage_loss: 0.3
+  w_reg_loss: 1.0
+  w_iou_loss: 200.0
+  w_mask_loss: 0.25
+  num_clips:
+    s: ${data.max_len_video} // ${data.target_stride}
+    _target_: !!python/name:kn_util.config.ops.eval_str ''
+  nms_threshold: 0.37
+  dropout: 0.1
+model:
+  frame_layer:
+    kernel_size: 2
+    stride: 2
+    _target_: !!python/name:models.msat.modeling.frame_modules.frame_pool.FrameAvgPool ''
+  bert_layer:
+    dataset: ${data.dataset}
+    vlbert: segformerx
+    hidden_size: 512
+    ff_dim: 512
+    num_head: 32
+    num_layers: 4
+    input_vid_dim: 1024
+    input_txt_dim: 300
+    sr_ratio_lvls:
+    - 4
+    - 4
+    - 2
+    - 1
+    use_patch_merge:
+    - true
+    - false
+    - true
+    - false
+    classifier_type: 2fc
+    classifier_dropout: ${model_cfg.dropout}
+    classifier_hidden_size: 512
+    _target_: !!python/name:models.msat.modeling.bert_modules.vlbert.TLocVLBERT ''
+  cfg: ${model_cfg}
+  _target_: !!python/name:models.msat.modeling.tan.TAN ''

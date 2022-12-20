@@ -1,0 +1,97 @@
+flags:
+  debug: false
+  ddp: false
+  amp: false
+  train: true
+  wandb: true
+  seed: 3147
+  exp: msat-32.anet.roberta
+paths:
+  root_dir: /export/home2/kningtg/WORKSPACE/moment-retrieval/query-moment
+  data_dir: /export/home2/kningtg/WORKSPACE/moment-retrieval/data-bin/raw
+  cache_dir: /export/home2/kningtg/WORKSPACE/moment-retrieval/data-bin/cache
+  work_dir: ${paths.root_dir}/work_dir/${flags.exp}
+data:
+  datapipe: msat_roberta
+  dataset: activitynet
+  dataset_dir: ${paths.data_dir}/${data.dataset}
+  max_len_video: 64
+  target_stride: 2
+  vid_hdf5: i3d.hdf5
+  vid_hdf5_key_template: '{video_id}'
+  txt_hdf5: roberta-large.txt.hdf5
+  txt_hdf5_key_template: '{text_id}/last_hidden_state'
+  word_mask_rate: 0.0
+eval:
+  ms:
+  - 1
+  - 5
+  ns:
+  - 0.3
+  - 0.5
+  - 0.7
+  best_monitor: R1@IoU=0.7
+  is_best: max
+train:
+  num_workers: 4
+  num_epochs: 100
+  batch_size: 16
+  optimizer:
+    params: null
+    lr: 0.0001
+    betas:
+    - 0.9
+    - 0.999
+    weight_decay: 0.0001
+    _target_: !!python/name:torch.optim.adamw.AdamW ''
+  clip_grad: 10.0
+  lr_scheduler:
+    optimizer: null
+    factor: 0.8
+    patience: 20
+    verbose: true
+    _target_: !!python/name:torch.optim.lr_scheduler.ReduceLROnPlateau ''
+  val_interval: 0.25
+  print_interval: 0.1
+model_cfg:
+  arch: msat
+  w_stage_loss: 0.4
+  w_reg_loss: 1.0
+  w_iou_loss: 10.0
+  w_mask_loss: 0.1
+  num_clips:
+    s: ${data.max_len_video} // ${data.target_stride}
+    _target_: !!python/name:kn_util.config.ops.eval_str ''
+  nms_threshold: 0.51
+  dropout: 0.1
+model:
+  frame_layer:
+    kernel_size: 2
+    stride: 2
+    _target_: !!python/name:models.msat.modeling.frame_modules.frame_pool.FrameAvgPool ''
+  bert_layer:
+    dataset: ${data.dataset}
+    visual_size: 1024
+    hidden_size: 512
+    input_size_txt: 1024
+    num_hidden_layers: 6
+    num_attention_heads: 16
+    intermediate_size: 512
+    hidden_act: gelu
+    hidden_dropout_prob: ${model_cfg.dropout}
+    attention_probs_dropout_prob: ${model_cfg.dropout}
+    max_position_embeddings: 512
+    type_vocab_size: 2
+    initializer_range: 0.02
+    visual_scale_text_init: 1.0
+    visual_scale_object_init: 1.0
+    visual_ln: false
+    word_embedding_frozen: false
+    with_pooler: true
+    classifier_type: 2fc
+    classifier_dropout: ${model_cfg.dropout}
+    classifier_hidden_size: 512
+    pe: sine
+    _target_: !!python/name:models.msat.modeling.bert_modules.vlbert.TLocVLBERT ''
+  cfg: ${model_cfg}
+  _target_: !!python/name:models.msat.modeling.tan.TAN ''

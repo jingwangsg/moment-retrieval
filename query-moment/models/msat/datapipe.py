@@ -5,7 +5,7 @@ import os.path as osp
 
 sys.path.insert(0, osp.join(osp.dirname(__file__), "../.."))
 from torchdata.datapipes.iter import IterDataPipe
-from data.datapipe import *
+from kn_util.data.datapipe import *
 from kn_util.basic import registry
 import torch.nn.functional as F
 
@@ -18,6 +18,8 @@ class ActivityNetAnnotationProcessor(IterDataPipe):
 
     def get_item(self, annotation):
         gt_s, gt_e = annotation["gt"][0], annotation["gt"][1]
+        if np.allclose(gt_s, gt_e):
+            gt_e = gt_s + 1e-5
         num_clips = self.num_clips
         gt_s *= num_clips
         gt_e *= num_clips
@@ -51,7 +53,7 @@ class ActivityNetAnnotationProcessor(IterDataPipe):
             idx = np.argmax(p)
             map_gt[2, idx] = 1.
 
-        item = {'map_gt': map_gt}
+        item = dict(map_gt=map_gt, gt_times=np.array([gt_s, gt_e]))
 
         return item
 
@@ -129,8 +131,8 @@ def after_collate(result):
     return result
 
 
-@registry.register_datapipe("msat_roberta_wo_mask")
-def build_datapipe_msat_roberta_wo_mask(cfg, split):
+@registry.register_datapipe("msat_roberta")
+def build_datapipe_msat_roberta(cfg, split):
     dataset = cfg.data.dataset
     assert dataset != "charades"
     dataset_dir = cfg.data.dataset_dir
@@ -148,6 +150,7 @@ def build_datapipe_msat_roberta_wo_mask(cfg, split):
     dataset_dp = build_tsvg_parser(cfg, split=split)
     # filter nonexisted hdf5 key
     dataset_dp = dataset_dp.filter_by_hdf5_key(hdf5_file=vid_hdf5, key_template=vid_hdf5_key_template)
+
     dataset_dp = dataset_dp.in_memory_cache()
 
     # shuffle + sharding_filter
@@ -156,6 +159,7 @@ def build_datapipe_msat_roberta_wo_mask(cfg, split):
 
     # load text feature
     dataset_dp = dataset_dp.load_hdf5(hdf5_file=txt_hdf5, key_template=txt_hdf5_key_template, output_key_prefix="text")
+
     # load video feature
     dataset_dp = dataset_dp.load_hdf5(hdf5_file=vid_hdf5, key_template=vid_hdf5_key_template, output_key_prefix="video")
     dataset_dp = dataset_dp.map(after_load_vid)
@@ -192,7 +196,6 @@ def build_datapipe_msat_roberta_wo_mask(cfg, split):
     dataset_dp = dataset_dp.collect(
         ["video.hdf5.pad", "text.hdf5.pad", "text.hdf5.mask", "gt_times", "map_gt", "gt", "text_id"],
         ["visual_input", "textual_input", "textual_mask", "gt_times", "gt_maps", "gt", "text_id"])
-
     dataset_dp = dataset_dp.collate(default_collate_fn).map(after_collate)
 
     return dataset_dp.set_length(num_batches)
@@ -232,7 +235,7 @@ def build_datapipe_msat(cfg, split):
     dataset_dp = dataset_dp.in_memory_cache()
 
     # shuffle + sharding_filter
-    dataset_dp = prepare_for_dataloader(dataset_dp, batch_size=batch_size, is_train=is_train)
+    dataset_dp = prepare_for_dataloader(dataset_dp, shuffle=is_train)
     num_samples = len(list(dataset_dp))
 
     # load text feature
@@ -276,14 +279,24 @@ def build_datapipe_msat(cfg, split):
                                          to_length=cfg.data.max_len_video)
     dataset_dp = dataset_dp.pad_sequence(from_key="text.embs", axis=0, fill_value=0.0)
     dataset_dp = dataset_dp.pad_sequence(from_key="text.inds", axis=0, fill_value=0.0, return_mask=False)
-    dataset_dp = dataset_dp.pad_sequence(from_key="word_mask", axis=0, fill_value=False, return_mask=False)
 
     # collect
-    dataset_dp = dataset_dp.collect([
-        "video.hdf5.pad", "text.embs.pad", "text.embs.mask", "text.inds.pad", "word_mask.pad", "gt_times", "map_gt",
+    from_keys = [
+        "video_id", "text", "video.hdf5.pad", "text.embs.pad", "text.embs.mask", "text.inds.pad", "gt_times", "map_gt",
         "gt"
-    ], ["visual_input", "textual_input", "textual_mask", "word_label", "word_mask", "gt_times", "gt_maps", "gt"])
+    ]
+    to_keys = [
+        "video_id", "text", "visual_input", "textual_input", "textual_mask", "word_label", "gt_times", "gt_maps", "gt"
+    ]
 
+    if use_word_mask:
+        from_keys.append("word_mask.pad")
+        to_keys.append("word_mask")
+        dataset_dp = dataset_dp.pad_sequence(from_key="word_mask", axis=0, fill_value=False, return_mask=False)
+
+    dataset_dp = dataset_dp.collect(from_keys, to_keys)
+
+    # collate
     dataset_dp = dataset_dp.collate(default_collate_fn).map(after_collate)
 
     return dataset_dp.set_length(num_batches)

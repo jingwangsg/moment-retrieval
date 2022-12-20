@@ -8,14 +8,10 @@ from kn_util.basic import registry
 
 def build_datapipe(cfg, split):
     return registry.build_datapipe(cfg.data.datapipe, cfg=cfg, split=split)
-    # if cfg.data.datapipe == "default":
-    #     return build_datapipe_default(cfg, split=split)
-    # if cfg.data.datapipe == "msat":
-    #     return build_datapipe_msat(cfg, split=split)
 
 
 def build_dataloader(cfg, split="train"):
-    assert split in ["train", "test", "val"]
+    assert split in ["train", "test", "val", "train_no_shuffle"]
     datapipe = build_datapipe(cfg, split=split)
 
     reading_service = None

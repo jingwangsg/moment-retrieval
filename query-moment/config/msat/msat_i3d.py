@@ -1,6 +1,6 @@
 from omegaconf import OmegaConf
-from detectron2.config import LazyCall as L
-from ..common.runtime import paths, flags
+from kn_util.config import LazyCall as L
+from ..runtime import paths, flags
 import os.path as osp
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import StepLR
